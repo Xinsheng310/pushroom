@@ -2,7 +2,10 @@
 
 import { log, showErr, installGlobalHandlers } from './log.js';
 import { audioOn, audioState, sfx, humStart, humSet, humStop } from './audio.js';
-import { openCamera, loadModel, getStream, getLandmarker, getModelStatus, drawSkeleton } from './pose.js';
+import {
+  openCamera, loadModel, getStream, getLandmarker, getModelStatus, drawSkeleton,
+  setCameraPaused, releaseCamera, isCameraLive,
+} from './pose.js';
 import {
   SIGNALS, bodyFound, setAspect, SETTLE_MS, HOLD_MS, PASS,
   scoreCalibration, TH, S, track, resetCounter,
@@ -44,7 +47,10 @@ const bindSwitch = (el,key,after) => el.addEventListener('click',()=>{
   cfg[key] = !cfg[key]; el.setAttribute('aria-checked', cfg[key]); after && after();
 });
 bindSwitch($('swCam'), 'front', ()=>{
-  openCamera(cfg, video, skel);
+  /* 只有相機已經開著才重開（換鏡頭）。
+     若還沒開過就不要在這裡開 —— 使用者可能只是在首頁調設定，
+     不該因為切個開關就啟動相機。 */
+  if(getStream()) openCamera(cfg, video, skel);
   /* 換鏡頭後基準完全不同（畫面鏡像、拍攝距離都變了），
      舊校正不能用，清掉並提示重新校正。 */
   if(S.key){
@@ -449,8 +455,67 @@ function finish(){
 let wl = null;
 async function requestWakeLock(){ try{ wl = await navigator.wakeLock?.request('screen'); }catch(e){} }
 function releaseWakeLock(){ try{ wl?.release(); }catch(e){} wl = null; }
+
+/* ============ 省電：頁面進背景時的相機處理 ============
+
+   問題：把網頁縮小但沒關掉時，姿勢推論雖然已經停了（見 INFER_PHASES），
+   但「相機硬體」還在持續曝光供幀 —— 那是實實在在的耗電與發熱。
+
+   策略分三層：
+     1. 進背景 → 立刻停止供幀（track.enabled=false）。
+        恢復是即時的，不需重新授權、不需等曝光收斂。
+     2. 背景超過 30 秒 → 完整釋放相機（track.stop()）。
+        代價是回來要重開，iOS 可能重新要求授權、曝光收斂 0.5–2 秒。
+     3. 比賽進行中 → 兩層都豁免，什麼都不動。
+
+   為什麼比賽中要完全豁免：手機躺在地上、使用者趴著做。
+   若切個通知回來相機要重啟 2 秒，那幾下就漏算了 ——
+   規格第 6.4 節說背景/來電/通知是常態，計數準確度優先於省電。 */
+
+const CAM_RELEASE_MS = 30000;
+/* 這些相位代表「正在比賽或準備比賽」，一律不動相機 */
+const CAM_KEEP_PHASES = new Set(['calib','countdown','run','vsrun']);
+let camReleaseTimer = null;
+let camWasReleased = false;
+
+const matchInProgress = ()=> CAM_KEEP_PHASES.has(S.phase);
+
+function onHidden(){
+  if(matchInProgress()){
+    log('進背景但比賽中，相機保持開啟');
+    return;
+  }
+  /* 嗡鳴的 oscillator 不會自己停，切走前要收乾 */
+  humStop();
+  setCameraPaused(true);
+  clearTimeout(camReleaseTimer);
+  camReleaseTimer = setTimeout(()=>{
+    /* 30 秒後才真的釋放。再確認一次相位 —— 這段時間內使用者
+       可能已經回來並開始比賽（雖然那時 onVisible 已經清掉 timer）。 */
+    if(matchInProgress()) return;
+    if(releaseCamera()) camWasReleased = true;
+  }, CAM_RELEASE_MS);
+}
+
+async function onVisible(){
+  clearTimeout(camReleaseTimer); camReleaseTimer = null;
+  if(S.phase==='run' || S.phase==='vsrun') requestWakeLock();
+
+  if(camWasReleased){
+    camWasReleased = false;
+    /* 只有真的需要相機的畫面才重開，回首頁不用急著開 */
+    if(needsInference() || isLabOpen()){
+      log('重新開啟相機…');
+      await openCamera(cfg, video, skel);
+    }
+    return;
+  }
+  setCameraPaused(false);
+}
+
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible' && S.phase==='run') requestWakeLock();
+  if(document.visibilityState==='visible') onVisible();
+  else onHidden();
 });
 
 /* ============ 測試模式 ============ */
@@ -899,5 +964,8 @@ if('serviceWorker' in navigator && window.isSecureContext){
   else addEventListener('load', registerSW);
 }
 
-openCamera(cfg, video, skel);
+/* 刻意不在啟動時開相機。
+   首頁、大廳、戰績都不需要看到你 —— 一啟動就開相機等於從打開 App 那一刻
+   就開始耗電發熱，而使用者可能只是想看戰績。
+   改成「按開始 / 進測試模式 / 對戰」時才開（那幾處都已有 if(!getStream()) 的按需開啟）。 */
 loop();

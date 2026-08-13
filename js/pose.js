@@ -16,6 +16,37 @@ export const vis = (lm,i) => (lm[i]?.visibility ?? 0);
 let stream = null;
 export const getStream = ()=> stream;
 
+/** 相機是否正在供幀（enabled=false 時仍持有裝置但不耗電於曝光） */
+export function isCameraLive(){
+  const t = stream?.getVideoTracks?.()[0];
+  return !!t && t.readyState === 'live' && t.enabled;
+}
+
+/**
+ * 暫停/恢復供幀。這不是 stop() —— 裝置仍被持有，
+ * 恢復是即時的、不需重新授權、不需等曝光收斂。
+ */
+export function setCameraPaused(paused){
+  const t = stream?.getVideoTracks?.()[0];
+  if(!t) return false;
+  if(t.enabled === !paused) return false;   // 已經是目標狀態
+  t.enabled = !paused;
+  return true;
+}
+
+/**
+ * 完整釋放相機。省電最徹底，但代價是：
+ * iOS 重新 getUserMedia 可能再次要求授權，且曝光收斂要 0.5–2 秒。
+ * 所以只在「確定不會馬上用到」時呼叫（見 main.js 的省電策略）。
+ */
+export function releaseCamera(){
+  if(!stream) return false;
+  stream.getTracks().forEach(t=>{ try{ t.stop(); }catch(e){} });
+  stream = null;
+  log('相機已釋放（省電）');
+  return true;
+}
+
 /**
  * 開啟相機。cfg.front 決定前/後鏡頭，前鏡頭時鏡像顯示。
  * @param {{front:boolean}} cfg
