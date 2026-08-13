@@ -44,6 +44,17 @@ body{
    捲動會讓巨大數字跑出視野。這兩個畫面本來就只有一屏。 */
 #run,#setup{overflow:hidden}
 
+/* ---------- 面板轉場 ----------
+   從下往上抹入。clip-path 與 transform 都走合成器、不觸發 layout。
+   #run 不做轉場：進入計數的瞬間相機推論正在暖機，一毫秒都不該浪費，
+   而且使用者此時已趴好、不需要儀式感。 */
+.panel.enter{animation:panelIn .2s cubic-bezier(.2,.8,.2,1) both}
+@keyframes panelIn{
+  from{clip-path:inset(100% 0 0 0);transform:translateY(6px)}
+  to  {clip-path:inset(0 0 0 0);  transform:none}
+}
+#run.enter{animation:none}
+
 /* ---------- home ---------- */
 #home{background:
   radial-gradient(120% 80% at 50% -10%, #1C2733 0%, var(--ink) 60%);
@@ -140,12 +151,16 @@ body{
 .mlist li{display:flex;align-items:center;gap:10px;padding:11px 0;
   border-bottom:1px solid rgba(255,255,255,.07)}
 .mlist li:last-child{border-bottom:0}
-.mlist .verdict{flex:0 0 auto;width:34px;height:34px;border-radius:99px;
+/* 勝負用「形態」而非顏色：勝=實心反白、敗=細框、和=虛線。
+   理由（資深美術）：橘與青已各背了六到八種語意，再拿來表示勝負會讓
+   戰績列表變成紅綠燈。形態掃一眼就分得出來，且對色弱使用者友善。
+   方角而非圓角，與全案 2px 直角的工業語彙一致。 */
+.mlist .verdict{flex:0 0 auto;width:34px;height:34px;border-radius:2px;
   display:flex;align-items:center;justify-content:center;
   font-family:Anton,sans-serif;font-size:14px;border:1px solid var(--line)}
-.mlist .win{color:var(--cool);border-color:rgba(53,224,212,.5)}
-.mlist .loss{color:var(--signal);border-color:rgba(255,90,31,.5)}
-.mlist .draw{color:var(--dim)}
+.mlist .win{background:var(--fg);color:var(--ink);border-color:var(--fg)}
+.mlist .loss{color:var(--dim);border-color:var(--line)}
+.mlist .draw{color:var(--dim);border-style:dashed}
 .mlist .who{flex:1 1 auto;min-width:0}
 .mlist .who b{display:block;font-size:14px;font-weight:500;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -162,7 +177,21 @@ body{
 .calibchip small{display:block;color:var(--dim);font-size:11px;margin-top:2px;line-height:1.5}
 .calibchip .mini{flex:0 0 auto;min-height:44px}
 
-.vsverdict{font-size:clamp(42px,15vw,68px);line-height:1;color:var(--signal);margin:8px 0 4px}
+/* 判定文字不分色（見 .mlist .verdict 的說明），用尺寸與進場方式區分。
+   勝：從小彈入 + 全螢幕反相一次；敗：從上沉降、字色降到 dim；和：水平滑入。 */
+.vsverdict{font-size:clamp(42px,15vw,68px);line-height:1;letter-spacing:-.02em;
+  color:var(--fg);margin:8px 0 4px}
+.vsverdict.won  {animation:vWon .42s cubic-bezier(.2,.9,.2,1) both}
+.vsverdict.lost {color:var(--dim);animation:vLost .5s cubic-bezier(.3,.7,.3,1) both}
+.vsverdict.tied {animation:vTied .4s cubic-bezier(.2,.8,.2,1) both}
+@keyframes vWon {0%{transform:scale(.62);opacity:0} 60%{transform:scale(1.06)} 100%{transform:scale(1);opacity:1}}
+@keyframes vLost{0%{transform:translateY(-22px);opacity:0} 100%{transform:none;opacity:1}}
+@keyframes vTied{0%{transform:translateX(-18px);opacity:0} 100%{transform:none;opacity:1}}
+
+/* 勝利的「大場面」：全螢幕反相 140ms。單一 filter、只在結算觸發
+   （此時相機推論已關閉），是全案最便宜的衝擊力。 */
+#stage.invert{animation:invertOnce .14s steps(1,end) 2}
+@keyframes invertOnce{0%{filter:invert(1)} 100%{filter:none}}
 .vsscore{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:24px}
 .vsscore b{display:block;font-size:44px;line-height:1}
 .vsscore small{display:block;color:var(--dim);font-size:11px;margin-top:4px;
@@ -174,10 +203,23 @@ body{
   text-align:center;pointer-events:none}
 .vslivename{font-size:11px;letter-spacing:.18em;color:var(--dim);
   max-width:16ch;margin:0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.vslivereps{font-size:62px;line-height:1;color:var(--cool);margin-top:2px}
+/* 對手數字放大到 13vh —— 規格第 7 節指名「唯一該強化的是對手數字」。
+   原本 62px 撐不起緊張感。負字距讓多位數變成一個塊面（Anton 是壓縮字體）。 */
+.vslivereps{font-size:13vh;line-height:1;color:var(--cool);margin-top:2px;
+  letter-spacing:-.03em;will-change:transform}
+/* 數字跳動時的一次性 pulse。只動 transform，走合成器。
+   #vsLive 本身沒有 mix-blend-mode，所以這裡加 transform 是安全的
+   （#count 不行 —— 會破壞它的 difference 混色）。 */
+.vslivereps.bump{animation:repBump .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes repBump{
+  0%{transform:scale(1)} 40%{transform:scale(1.18)} 100%{transform:scale(1)}
+}
 .vslivegap{font-size:13px;letter-spacing:.06em;margin-top:2px;color:var(--dim)}
 .vslivegap.lead{color:var(--cool)}
-.vslivegap.behind{color:var(--signal)}
+/* 落後時橘色文字持續脈動 —— 這是規格允許在計數中強化的唯一資訊。
+   只動 opacity，成本可忽略。 */
+.vslivegap.behind{color:var(--signal);animation:behindPulse 1.6s ease-in-out infinite}
+@keyframes behindPulse{0%,100%{opacity:1} 50%{opacity:.45}}
 #vsLive.stale{opacity:.45}
 
 /* ---------- setup / calibration ---------- */
@@ -186,6 +228,22 @@ body{
 .step{font-size:11px;letter-spacing:.2em;color:var(--cool)}
 .say{font-size:clamp(22px,7vw,32px);line-height:1.3;font-weight:700;max-width:16ch;
   text-shadow:0 2px 24px rgba(0,0,0,.9)}
+/* 倒數數字：放大到全案最誇張的尺寸。此時相機推論只是暖機、沒有計數壓力，
+   而且這是每一場都會經過的時刻，per-play 曝光最高。 */
+.say.count{font-family:Anton,sans-serif;font-size:min(46vh,52vw);line-height:.8;
+  letter-spacing:-.04em;max-width:none;font-weight:400}
+.say.count.tick{animation:cdTick .62s cubic-bezier(.15,.85,.25,1) both}
+@keyframes cdTick{
+  0%  {transform:scale(2.1);opacity:0}
+  22% {transform:scale(1);  opacity:1}
+  100%{transform:scale(.94);opacity:.9}
+}
+.say.count.go{color:var(--signal);animation:cdGo .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes cdGo{
+  0%  {transform:scale(.7);opacity:0}
+  35% {transform:scale(1.22);opacity:1}
+  100%{transform:scale(1);opacity:1}
+}
 .sub{color:var(--dim);font-size:13px;max-width:26ch;line-height:1.7}
 .ring{width:120px;height:120px}
 .ring circle{fill:none;stroke-width:5}
@@ -283,5 +341,31 @@ body{
 
 #err{position:fixed;left:16px;right:16px;bottom:calc(var(--safe-b) + 16px);z-index:99;
   background:var(--signal);color:#fff;padding:14px 16px;border-radius:2px;font-size:13px;line-height:1.6;display:none}
+
+/* ---------- 全域按壓回饋 ----------
+   使用者可能手汗、剛做完力竭。沒有按壓感會讓他不確定「我按到了嗎」
+   而重複點擊。只動 transform，成本可忽略。 */
+.cta,.ghost,.chip,.sw{transition:transform .09s ease-out,background .15s,border-color .15s,color .15s}
+.cta:active:not(:disabled),
+.ghost:active:not(:disabled),
+.chip:active,
+.sw:active{transform:scale(.96)}
+
+/* disabled → enabled 的解鎖提示。使用者可能正盯著別處
+   （等模型載入、等對手按準備），沒有提示就不知道可以按了。 */
+.cta.unlocked{animation:unlock .5s ease-out}
+@keyframes unlock{
+  0%  {box-shadow:0 0 0 0 rgba(255,90,31,.55)}
+  100%{box-shadow:0 0 0 18px rgba(255,90,31,0)}
+}
+
+/* 中止鈕改長按 —— 力竭時誤觸會毀掉整場（觸控目標也補到 44px）。
+   進度用 ::after 的環從外圈收縮表示，純 transform、無額外 DOM。 */
+#abort{width:44px;height:44px;overflow:visible}
+#abort::after{content:"";position:absolute;inset:-5px;border-radius:99px;
+  border:2px solid var(--signal);opacity:0;transform:scale(1.35);pointer-events:none}
+#abort.holding{border-color:var(--signal);color:var(--signal)}
+#abort.holding::after{opacity:1;transform:scale(1);
+  transition:transform .45s linear,opacity .1s}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

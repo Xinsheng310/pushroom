@@ -11,6 +11,7 @@ import {
   $, panels, show, isLabOpen, fmt, setRing, setRingStroke, showRing,
   renderCalibReport, addTick, clearTicks, pulse, drawChart,
   renderChecks, renderSignalRows, updateSignalRow, renderMatchList,
+  showCountdown, clearCountdown, flash, rollNumber, replay,
 } from './ui.js';
 import { initFirebase, isReady } from './firebase.js';
 import {
@@ -61,6 +62,8 @@ bindSwitch($('swSkel'), 'skeleton', ()=>{
 loadModel(ok=>{
   $('start').disabled = !ok;
   $('start').textContent = ok? '開始' : '模型載入失敗';
+  /* 模型載完是靜默變色的，使用者可能正盯著別處。給一次解鎖提示。 */
+  if(ok) replay($('start'), 'unlocked');
 });
 
 /* ============ 主迴圈 ============
@@ -229,9 +232,10 @@ function startCountdown(){
   $('subSay').textContent = '回到起始姿勢';
   let n = 3;
   const tick = ()=>{
-    if(n<0){ clearInterval(cdTimer); beginRun(); return; }
-    $('say').textContent = n>0 ? String(n) : 'GO';
+    if(n<0){ clearInterval(cdTimer); clearCountdown(); beginRun(); return; }
+    showCountdown(n>0 ? n : 'GO');
     n>0 ? sfx.tick() : sfx.go();
+    if(n===0) flash(.28);
     n--;
   };
   tick(); cdTimer = setInterval(tick, 1000);
@@ -409,7 +413,8 @@ function onFrame(lm, ts){
 function finish(){
   S.phase = 'done'; releaseWakeLock(); sfx.end();
   const dur = cfg.seconds? cfg.seconds*1000 : (S.times.at(-1)||0);
-  $('rTotal').textContent = S.reps;
+  /* 總數從 0 滾上去，配漸快的音階 —— 單機模式唯一的獎賞時刻 */
+  rollNumber('rTotal', S.reps, 720, n=>{ if(n % 2 === 0) sfx.rep(n||1); });
   $('rTime').textContent = fmt(dur);
   $('rPace').textContent = S.reps? (dur/1000/S.reps).toFixed(2) : '—';
   let fast = '—';
@@ -683,7 +688,33 @@ $('cancelSetup').addEventListener('click',()=>{
   }
   show(calibReturn==='lab'?'lab':'home');
 });
-$('abort').addEventListener('click',()=>{ if(S.phase==='run') finish(); });
+/* 中止要長按 450ms。單按不會中止 —— 使用者趴著、手掌可能掃到螢幕，
+   而它旁邊就是手動計數鈕。誤觸中止會毀掉整場，多花半秒換掉這個風險。 */
+const ABORT_HOLD_MS = 450;
+let abortTimer = null;
+const abortBtn = $('abort');
+
+function abortHoldStart(e){
+  if(S.phase!=='run' && S.phase!=='vsrun') return;
+  e.preventDefault();
+  abortBtn.classList.add('holding');
+  clearTimeout(abortTimer);
+  abortTimer = setTimeout(()=>{
+    abortBtn.classList.remove('holding');
+    if(S.phase==='run') finish();
+    else if(S.phase==='vsrun'){ vsRun.onEnd?.(S.reps); stopVsClock(); S.phase='done'; }
+  }, ABORT_HOLD_MS);
+}
+function abortHoldEnd(){
+  clearTimeout(abortTimer); abortTimer = null;
+  abortBtn.classList.remove('holding');
+}
+abortBtn.addEventListener('pointerdown', abortHoldStart);
+abortBtn.addEventListener('pointerup', abortHoldEnd);
+abortBtn.addEventListener('pointercancel', abortHoldEnd);
+abortBtn.addEventListener('pointerleave', abortHoldEnd);
+/* 提示使用者要長按，否則他會以為按鈕壞了 */
+abortBtn.title = '長按結束';
 $('again').addEventListener('click',()=>{ warned10=false; startCountdown(); show('setup'); });
 $('home2').addEventListener('click',()=>{ S.phase='idle'; show('home'); });
 

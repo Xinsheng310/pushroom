@@ -8,7 +8,7 @@
    落後幾下、追上了沒，這個緊張感勝過任何特效。 */
 
 import { log, showErr } from './log.js';
-import { $, show, fmt } from './ui.js';
+import { $, show, fmt, showCountdown, clearCountdown, flash, rollNumber, replay } from './ui.js';
 import { sfx, audioOn } from './audio.js';
 import {
   createRoom, joinRoom, leaveRoom, onRoomChange, startMatch, setState, setReady,
@@ -337,6 +337,8 @@ function render(v){
     $('readyBtn').hidden = true;
     $('goMatch').hidden = false;
     const canStart = !!op && op.online && !!op.ready;
+    /* 從不能按變成能按時給一次解鎖提示 —— 房主可能正在看手機以外的地方 */
+    if(canStart && $('goMatch').disabled) replay($('goMatch'), 'unlocked');
     $('goMatch').disabled = !canStart;
     $('goMatch').textContent = !op ? '等對手加入'
       : !op.online ? '對手連線中…'
@@ -369,7 +371,7 @@ function render(v){
   }
 
   /* 結算畫面 */
-  if(v.result && currentPanel()==='vsresult') paintResult(v);
+  if(v.result && currentPanel()==='vsresult') paintResult();
 }
 
 const currentPanel = ()=>
@@ -424,17 +426,21 @@ async function onCounting(v){
     : '回到起始姿勢';
 
   /* 用校正後的時間跑倒數，雙方畫面同步 */
+  let shownN = -1;
   const tick = ()=>{
     const left = msUntil(startAt);
     if(left <= 0){
-      $('say').textContent = 'GO';
+      showCountdown('GO');
+      flash(.28);
       sfx.go();
+      /* GO 顯示完才切畫面並清掉巨大字樣式（否則校正提示會變成巨大字） */
       beginVsMatch();
+      setTimeout(clearCountdown, 400);
       return;
     }
     const n = Math.ceil(left/1000);
-    $('say').textContent = String(n);
-    sfx.tick();
+    /* 同一個數字不重播動畫 —— tick 的間隔算出來可能小於 1 秒 */
+    if(n !== shownN){ shownN = n; showCountdown(n); sfx.tick(); }
     setTimeout(tick, Math.min(1000, left - (n-1)*1000 || 1000));
   };
   tick();
@@ -443,6 +449,7 @@ async function onCounting(v){
 function beginVsMatch(){
   $('vsLive').hidden = false;
   $('vsLiveName').textContent = vs.opName;
+  shownOpReps = -1;          // 讓開場第一次更新也會 pulse
   updateVsLive();
   hooks.beginVsRun(vs.timer, vs.durationSec, onMyRep, onMatchEnd, vs.manual);
 }
@@ -463,13 +470,23 @@ function onMyRep(reps){
   updateVsLive();
 }
 
+let shownOpReps = -1;
 function updateVsLive(){
-  $('vsLiveReps').textContent = vs.opReps;
+  const el = $('vsLiveReps');
+  /* 只有數字真的變了才 pulse —— 這個函式每幀都會被叫到，
+     每幀重播動畫等於常駐動畫，違反「計數中不允許常駐動畫」。 */
+  if(vs.opReps !== shownOpReps){
+    shownOpReps = vs.opReps;
+    el.textContent = vs.opReps;
+    el.classList.remove('bump');
+    void el.offsetWidth;
+    el.classList.add('bump');
+  }
   const d = vs.myReps - vs.opReps;
-  const el = $('vsLiveGap');
-  el.classList.toggle('lead', d>0);
-  el.classList.toggle('behind', d<0);
-  el.textContent = d>0 ? `領先 ${d} 下` : d<0 ? `落後 ${-d} 下` : '平手';
+  const gap = $('vsLiveGap');
+  gap.classList.toggle('lead', d>0);
+  gap.classList.toggle('behind', d<0);
+  gap.textContent = d>0 ? `領先 ${d} 下` : d<0 ? `落後 ${-d} 下` : '平手';
 }
 
 /** 時間到 */
@@ -534,20 +551,35 @@ function onDone(){ if(vs.active) showVsResult(); }
 function showVsResult(){
   vs.active = false;
   $('vsLive').hidden = true;
-  paintResult(null);
+  paintResult();
   show('vsresult');
   sfx.end();
 }
 
-function paintResult(v){
+function paintResult(){
   const my = vs.myReps, op = vs.opReps;
-  $('vsMeReps').textContent = my;
-  $('vsOpReps').textContent = op;
+  const won = my>op, lost = my<op;
+
   $('vsMeName').textContent = '你';
   $('vsOpName').textContent = vs.opName;
-  const verdict = my>op ? '贏了' : my<op ? '輸了' : '平手';
-  $('vsVerdict').textContent = verdict;
-  $('vsVerdictCap').textContent = my>op ? `${my} : ${op}` : my<op ? `${my} : ${op}` : '平手';
+  $('vsVerdictCap').textContent = `${my} : ${op}`;
+
+  /* 判定用形態區分而非顏色（見 css 的說明）。
+     三種狀態互斥，先清乾淨再加，避免連續兩場殘留上一場的 class。 */
+  const el = $('vsVerdict');
+  el.textContent = won ? '贏了' : lost ? '輸了' : '平手';
+  el.classList.remove('won','lost','tied');
+  void el.offsetWidth;
+  el.classList.add(won ? 'won' : lost ? 'lost' : 'tied');
+
+  /* 比分滾動。雙方同時跑，勝方的音階往上、敗方不配音（安靜比噪音有份量）。 */
+  rollNumber('vsMeReps', my, 620, won ? (n=>{ if(n%2===0) sfx.rep(n||1); }) : undefined);
+  rollNumber('vsOpReps', op, 620);
+
+  if(won){
+    /* 全螢幕反相一次 —— 相機已關閉，這是最便宜的大場面 */
+    replay($('stage'), 'invert');
+  }
 }
 
 function endVersus(){

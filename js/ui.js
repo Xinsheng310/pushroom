@@ -11,8 +11,35 @@ export const panels = {
   lobby:$('lobby'), wait:$('wait'), vsresult:$('vsresult'), history:$('history'),
 };
 
-export const show = name =>
-  Object.entries(panels).forEach(([k,el]) => el.classList.toggle('on', k===name));
+/* 進場動畫用 class 觸發，動畫結束移除，讓下次切換能重播。
+   偏好減少動態時完全不加 class —— CSS 的 prefers-reduced-motion 會關掉
+   animation，但留著 class 沒意義，也避免有人日後在該 class 上加樣式。 */
+const reduceMotion = ()=>
+  matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let lastShown = null;
+
+export const show = name =>{
+  const changed = name !== lastShown;
+  lastShown = name;
+  Object.entries(panels).forEach(([k,el])=>{
+    const on = k===name;
+    el.classList.toggle('on', on);
+    if(!on){ el.classList.remove('enter'); return; }
+    if(!changed || reduceMotion()) return;
+    /* 移除再加，強制重播動畫（同一個 class 連續加不會重新觸發） */
+    el.classList.remove('enter');
+    void el.offsetWidth;
+    el.classList.add('enter');
+  });
+};
+
+/* 動畫結束就卸掉 class，不要長期掛著（會固定佔一個合成層） */
+for(const el of Object.values(panels)){
+  el.addEventListener('animationend', e=>{
+    if(e.target === el) el.classList.remove('enter');
+  });
+}
 
 export const isLabOpen = ()=> panels.lab.classList.contains('on');
 
@@ -79,12 +106,95 @@ export function addTick(times){
 
 export const clearTicks = ()=> { $('cadence').textContent = ''; };
 
-/* ============ 計數閃光 ============ */
-export function pulse(){
+/* ============ 倒數演出 ============ */
+/**
+ * 顯示一個倒數數字或 GO。單機與對戰共用，確保兩邊演出一致。
+ * @param {number|'GO'} v
+ */
+export function showCountdown(v){
+  const el = $('say');
+  const isGo = v === 'GO';
+  el.textContent = isGo ? 'GO' : String(v);
+  el.classList.add('count');
+  el.classList.remove('tick','go');
+  void el.offsetWidth;                     // 強制重播
+  el.classList.add(isGo ? 'go' : 'tick');
+}
+
+/** 離開倒數畫面時清掉，否則校正提示會變成巨大字 */
+export function clearCountdown(){
+  $('say').classList.remove('count','tick','go');
+}
+
+/* ============ 全螢幕閃光 ============
+   只動 opacity，是計數中唯一安全的全螢幕效果。 */
+/**
+ * @param {number} [strength=.22] 峰值不透明度
+ * @param {string} [color] 省略則用 CSS 的預設（訊號橘）
+ */
+export function flash(strength = .22, color){
   const f = $('flash');
+  if(color) f.style.background = color;
   f.style.transition = 'none';
-  f.style.opacity = '.30';
-  requestAnimationFrame(()=>{ f.style.transition='opacity .22s ease-out'; f.style.opacity='0'; });
+  f.style.opacity = String(strength);
+  requestAnimationFrame(()=>{
+    f.style.transition = 'opacity .24s ease-out';
+    f.style.opacity = '0';
+  });
+}
+
+/* 計數回饋。原本 .30 偏亮且蓋滿全屏 220ms，
+   降到 .18 把視覺預算讓給數字本身（技術美術建議）。 */
+export function pulse(){ flash(.18); }
+
+/* ============ 數字滾動 ============
+   結算的總數從 0 跑到最終值。這是最便宜的多巴胺：
+   一個 rAF 迴圈只改 textContent，此時相機推論已關閉，預算充足。 */
+/**
+ * @param {string} id 目標元素 id
+ * @param {number} to 最終值
+ * @param {number} [ms=700] 總時長
+ * @param {(n:number,i:number)=>void} [onStep] 每次跳號的回呼（用來配音效）
+ */
+export function rollNumber(id, to, ms = 700, onStep){
+  const el = $(id);
+  const target = Math.max(0, Math.floor(to));
+  if(reduceMotion() || target === 0){ el.textContent = String(target); return; }
+
+  const t0 = performance.now();
+  let shown = -1, done = false;
+  const finishNow = ()=>{
+    if(done) return;
+    done = true;
+    el.textContent = String(target);
+  };
+
+  const step = ()=>{
+    if(done) return;
+    const p = Math.min(1, (performance.now()-t0)/ms);
+    /* ease-out：開頭快、結尾慢，最後幾個數字看得清楚 */
+    const n = Math.round(target * (1 - Math.pow(1-p, 3)));
+    if(n !== shown){
+      shown = n;
+      el.textContent = String(n);
+      onStep?.(n, shown);
+    }
+    if(p < 1) requestAnimationFrame(step);
+    else finishNow();
+  };
+  requestAnimationFrame(step);
+
+  /* 保險：rAF 在背景分頁或未合成的環境完全不會觸發，
+     那時數字會永遠停在 0。用 timeout 補上最終值。 */
+  setTimeout(finishNow, ms + 120);
+}
+
+/** 一次性播放某個 class 的動畫（移除→重排→加回，強制重播） */
+export function replay(el, cls){
+  if(reduceMotion()) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
 }
 
 /* ============ 結算節奏圖 ============ */
