@@ -8,8 +8,18 @@
 
 ## 現況
 
-單機計數版可用：姿勢偵測、兩段式校正、音效回饋、計時結算、測試模式。
-房間對戰與登入尚未實作（見 [建置規格書](docs/REPROOM_BUILD_SPEC.md) 第 11 節實作順序）。
+規格第 11 節的八個步驟全部完成：
+
+- 單機計數：姿勢偵測、兩段式校正（結果存本機自動帶入）、音效、計時結算、測試模式
+- Google 登入與自訂暱稱（不沿用 Google 真名、不儲存 email）
+- 四碼房號對戰：建房/加入/分享、presence 與 30 秒斷線寬限、伺服器時鐘同步、對手即時比分
+- 判定標準可選：標準 / 寬鬆 / 房主的 / 各自 —— 雙方套用同一組門檻，基準各自校正
+- 戰績：勝敗統計與對戰紀錄（Firestore）
+- PWA：可加入主畫面
+
+## 線上版
+
+https://xinsheng310.github.io/pushroom/
 
 ## 本機測試
 
@@ -44,18 +54,25 @@ node tests/detect.test.mjs
 node tests/rules.test.mjs
 ```
 
-### 安全規則（行為驗證）
+### 安全規則（行為驗證，49 項）
 
-真的去試著攻擊規則。需要先安裝 Java 與 firebase-tools：
+真的用 emulator 去攻擊規則。需要 Java 與 firebase-tools：
 
 ```bash
 npm install -g firebase-tools
 npm install --no-save @firebase/rules-unit-testing firebase
-firebase emulators:exec --only firestore,database "node tests/rules.emulator.test.mjs"
+powershell -File tests/run-emulator.ps1
+```
+
+沒有系統 Java 時可用免安裝版，並把路徑傳給腳本：
+
+```bash
+powershell -File tests/run-emulator.ps1 -JavaHome "C:\path\to\jdk-21-jre"
 ```
 
 驗證項目包含：他人不可寫我的 reps、不可偽造比賽參與者、不可自己跟自己打刷勝場、
-winner 必須與次數相符、`startAt` 必須是伺服器時間戳、已寫入的戰績不可篡改。
+winner 必須與次數相符、`startAt` 必須是伺服器時間戳、已寫入的戰績不可篡改、
+房間層無法被一次覆寫。**動到任何規則後務必跑這個。**
 
 ## 專案結構
 
@@ -68,12 +85,19 @@ js/pose.js          相機 + MediaPipe 模型 + 骨架繪製
 js/detect.js        偵測演算法（訊號、校正、計數狀態機）
 js/ui.js            DOM 存取與渲染
 js/main.js          主流程
+manifest.json       PWA 設定
+sw.js               Service Worker（只快取靜態資源）
+icons/              PWA 圖示
 firestore.rules     Firestore 安全規則
+firestore.indexes.json  複合索引（戰績查詢用）
 database.rules.json Realtime Database 安全規則
-firebase.json       規則檔位置與 emulator 設定
+firebase.json       規則/索引位置與 emulator 設定
 tests/              迴歸測試
 docs/               規格書與原始單檔版
 ```
+
+`js/` 內的模組：`log` `audio` `pose` `detect` `ui` `firebase` `auth` `matches`
+`room` `roomcode` `clock` `share` `versus` `calibmode` `calibstore` `main`
 
 無框架、無打包工具，原生 ES modules，GitHub Pages 直接吃靜態檔案。
 

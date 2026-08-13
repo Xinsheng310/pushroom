@@ -7,6 +7,10 @@
 *-firebase-adminsdk-*.json
 # .firebaserc 只有專案 ID、不是機密，且部署需要它，所以不排除
 firebase-debug.log
+firestore-debug.log
+database-debug.log
+ui-debug.log
+pubsub-debug.log
 .firebase/
 
 # 本機 https 測試憑證
