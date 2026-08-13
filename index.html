@@ -27,22 +27,23 @@
   <!-- 掃描線：只在等待室與校正取樣期啟用（見 css 的說明） -->
   <div id="scan" class="scan"></div>
 
-  <!-- HOME -->
+  <!-- HOME — 儀器的開機畫面。
+       所有進場動畫由 CSS 的 #home.on 自動觸發，不經 JS ——
+       否則會先看到完整靜態畫面再突然重播一次進場。 -->
   <section id="home" class="panel on">
-    <div>
-      <div class="brand">
-        <h1 class="display">PUSH<br>ROOM</h1>
-        <span class="mono">V0.9</span>
+    <!-- 機身銘牌：大標撐滿寬度、左緣與下方所有元素對齊同一條基準線 -->
+    <div class="hz hz1">
+      <h1 class="brandmark display"><span>PUSH</span><span>ROOM</span></h1>
+      <div class="nameplate">
+        <span class="mono">POSE COUNTER · LOCAL ONLY</span>
+        <span class="mono ver">V0.9</span>
       </div>
-      <p class="tag">手機放地上，鏡頭對著你。每做完一下會有聲音回饋，時間到自動結算。</p>
 
       <!-- 帳號列：未登入顯示登入鈕，已登入顯示暱稱與統計 -->
+      <!-- 只在登入後顯示。未登入的登入動機由「跟朋友對戰」那顆按鈕承擔，
+           首頁不需要兩個各自解釋一次的登入提示。 -->
       <div id="account" class="acct" hidden>
-        <div id="acctOut" class="acctrow">
-          <button class="ghost mini" id="signIn">用 Google 登入</button>
-          <small>登入才能記戰績、跟朋友對戰。不登入也能練。</small>
-        </div>
-        <div id="acctIn" class="acctrow" hidden>
+        <div id="acctIn" class="acctrow">
           <div class="acctwho">
             <b id="acctName" class="mono">—</b>
             <small id="acctStats">—</small>
@@ -56,7 +57,7 @@
       </div>
     </div>
 
-    <div>
+    <div class="hz hz2">
       <div class="field">
         <label>時間</label>
         <div class="chips" id="durations">
@@ -67,19 +68,27 @@
         </div>
       </div>
 
-      <div class="field" style="margin-top:20px">
-        <div class="toggle">
-          <span>前鏡頭<small>手機放頭部下方時用前鏡頭；放身側拍全身用後鏡頭</small></span>
-          <button class="sw" id="swCam" aria-checked="true"></button>
-        </div>
-        <div class="toggle">
-          <span>顯示骨架<small>確認鏡頭有抓到你，會稍微耗電</small></span>
-          <button class="sw" id="swSkel" aria-checked="true"></button>
+      <!-- 鏡頭設定摺疊：新使用者無法在沒看過畫面前判斷該用哪個鏡頭，
+           老使用者設好也不再動。摺疊後釋放約 30% 的垂直空間。 -->
+      <div class="field camset">
+        <button class="camtoggle mono" id="camSetBtn" aria-expanded="false">
+          <span>鏡頭設定</span>
+          <small id="camSetSum">前鏡頭 · 骨架開</small>
+        </button>
+        <div id="camSetBody" hidden>
+          <div class="toggle">
+            <span>前鏡頭<small>手機放頭部下方時用前鏡頭；放身側拍全身用後鏡頭</small></span>
+            <button class="sw" id="swCam" aria-checked="true"></button>
+          </div>
+          <div class="toggle">
+            <span>顯示骨架<small>確認鏡頭有抓到你，會稍微耗電</small></span>
+            <button class="sw" id="swSkel" aria-checked="true"></button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div>
+    <div class="hz hz3">
       <!-- 有存檔時顯示，讓使用者知道不用再校正 -->
       <div id="calibChip" class="calibchip" hidden>
         <div>
@@ -88,12 +97,14 @@
         </div>
         <button class="ghost mini" id="calibClear">清除</button>
       </div>
-      <button class="cta" id="start" disabled>載入模型中…</button>
-      <div class="row" style="margin-top:8px">
-        <button class="ghost" id="versusBtn" style="flex:1;padding:16px" hidden>跟朋友對戰</button>
-        <button class="ghost" id="labBtn" style="flex:1;padding:16px">測試模式</button>
-      </div>
-      <p class="note" id="homeNote">按下開始才會啟用相機。首次會做 <b>兩次校正</b>：先撐直手臂，再下到最低點，之後開始計時。</p>
+
+      <!-- 系統狀態列。載入中由這裡播報，而不是讓橘色 CTA 去當載入指示器 ——
+           橘色出現本身就是「開機完成」的訊號。 -->
+      <div class="sysline mono" id="sysLine"><i></i><span id="sysText">MODEL · LOADING</span></div>
+      <button class="cta" id="start" disabled>開始</button>
+      <button class="ghost" id="versusBtn" style="width:100%;margin-top:12px;padding:16px" hidden>跟朋友對戰</button>
+      <p class="vshint" id="versusHint" hidden>需要登入才能開房間</p>
+      <p class="note" id="homeNote">按下開始才會啟用相機。首次會做 <b>兩次校正</b>：先撐直手臂，再下到最低點，之後開始計時。<button class="linkbtn" id="labBtn">測試模式</button></p>
     </div>
   </section>
 

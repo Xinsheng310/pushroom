@@ -44,7 +44,9 @@ $('durations').addEventListener('click', e=>{
   cfg.seconds = +b.dataset.sec;
 });
 const bindSwitch = (el,key,after) => el.addEventListener('click',()=>{
-  cfg[key] = !cfg[key]; el.setAttribute('aria-checked', cfg[key]); after && after();
+  cfg[key] = !cfg[key]; el.setAttribute('aria-checked', cfg[key]);
+  updateCamSummary();          // 摺疊列的摘要要跟著走
+  after && after();
 });
 bindSwitch($('swCam'), 'front', ()=>{
   /* 只有相機已經開著才重開（換鏡頭）。
@@ -65,11 +67,34 @@ bindSwitch($('swSkel'), 'skeleton', ()=>{
 });
 
 /* ============ 模型 ============ */
+/* 狀態列取代「載入模型中…」的按鈕文字。
+   讓一個 disabled 的灰按鈕去播報系統狀態，等於把橘色 CTA 當載入指示器，
+   違反「橘 = 唯一注意力焦點」。改成上方的 mono 狀態列播報，
+   按鈕文字始終是「開始」—— 橘色亮起本身就是開機完成的訊號。 */
+function setSysState(state, text){
+  const el = $('sysLine');
+  el.classList.remove('loading','ready','failed');
+  el.classList.add(state);
+  $('sysText').textContent = text;
+}
+setSysState('loading', 'MODEL · LOADING');
+
 loadModel(ok=>{
   $('start').disabled = !ok;
-  $('start').textContent = ok? '開始' : '模型載入失敗';
+  setSysState(ok?'ready':'failed', ok? 'MODEL · READY' : 'MODEL · FAILED');
   /* 模型載完是靜默變色的，使用者可能正盯著別處。給一次解鎖提示。 */
   if(ok) replay($('start'), 'unlocked');
+});
+
+/* 鏡頭設定摺疊。摘要文字要跟著開關走，收起來時才知道目前是什麼設定。 */
+function updateCamSummary(){
+  $('camSetSum').textContent =
+    (cfg.front ? '前鏡頭' : '後鏡頭') + ' · ' + (cfg.skeleton ? '骨架開' : '骨架關');
+}
+$('camSetBtn').addEventListener('click', ()=>{
+  const open = $('camSetBtn').getAttribute('aria-expanded') === 'true';
+  $('camSetBtn').setAttribute('aria-expanded', String(!open));
+  $('camSetBody').hidden = open;
 });
 
 /* ============ 主迴圈 ============
@@ -623,13 +648,19 @@ $('consentOk').addEventListener('click', ()=>{
 
 /* ============ 帳號 UI ============ */
 function renderAccount(user, prof){
-  /* Firebase 沒就緒（設定未填 / CDN 掛）就整塊隱藏，維持純單機體驗 */
-  $('account').hidden = !isReady();
   const signedIn = !!user;
-  $('acctOut').hidden = signedIn;
+  /* 未登入時整塊隱藏 —— 登入的動機由「跟朋友對戰」那顆按鈕承擔，
+     首頁不需要兩個各自解釋一次的登入提示。
+     Firebase 沒就緒（設定未填 / CDN 掛）時同樣隱藏，維持純單機體驗。 */
+  $('account').hidden = !(isReady() && signedIn);
   $('acctIn').hidden  = !signedIn;
-  /* 對戰需要登入（房間要記誰是誰），沒登入就不顯示按鈕 */
-  $('versusBtn').hidden = !(isReady() && signedIn);
+  /* 對戰入口一律顯示，即使沒登入。
+     原本未登入就 hidden，等於新使用者從頭到尾看不到「可以跟朋友對戰」——
+     而那正是這個 App 跟其他計數器的唯一差別。
+     改成：未登入時按下去先登入，成功後直接進大廳。
+     動機在正確的時機出現（為了對戰而登入，不是為了登入而登入）。 */
+  $('versusBtn').hidden = !isReady();
+  $('versusHint').hidden = signedIn;
   if(signedIn && prof){
     $('acctName').textContent = prof.displayName;
     const s = prof.stats || {};
@@ -638,23 +669,6 @@ function renderAccount(user, prof){
   }
 }
 onAuthChange(renderAccount);
-
-$('signIn').addEventListener('click', async ()=>{
-  audioOn();
-  $('signIn').disabled = true;
-  $('signIn').textContent = '登入中…';
-  try{
-    await signIn();
-    /* 首次登入還在用預設暱稱 → 直接請他改，不要讓「匿名選手」上場 */
-    if(usingDefaultName()) openNamePanel();
-  }catch(e){
-    showErr('登入失敗：'+(e.message||e));
-    log('登入失敗：'+(e.message||e).toString().slice(0,110));
-  }finally{
-    $('signIn').disabled = false;
-    $('signIn').textContent = '用 Google 登入';
-  }
-});
 
 $('signOut').addEventListener('click', async ()=>{
   audioOn();
@@ -885,6 +899,23 @@ installVersusHooks({
 $('versusBtn').addEventListener('click', ()=>{
   audioOn();
   requireConsent(async ()=>{
+    /* 未登入就先登入 —— 使用者是「為了跟朋友對戰」而登入，
+       登入成功後直接進大廳，不要把他丟回首頁再叫他按一次。 */
+    if(!getUser()){
+      $('versusBtn').disabled = true;
+      $('versusBtn').textContent = '登入中…';
+      try{
+        await signIn();
+        if(!getUser()) return;            // 使用者取消
+        if(usingDefaultName()){ openNamePanel(); return; }
+      }catch(e){
+        showErr('登入失敗：'+(e.message||e));
+        return;
+      }finally{
+        $('versusBtn').disabled = false;
+        $('versusBtn').textContent = '跟朋友對戰';
+      }
+    }
     if(!getStream()) await openCamera(cfg, video, skel);
     openLobby();
   });
