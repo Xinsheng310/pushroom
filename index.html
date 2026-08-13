@@ -24,6 +24,8 @@
   <canvas id="skeleton"></canvas>
   <div id="veil"></div>
   <div id="flash"></div>
+  <!-- 掃描線：只在等待室與校正取樣期啟用（見 css 的說明） -->
+  <div id="scan" class="scan"></div>
 
   <!-- HOME -->
   <section id="home" class="panel on">
@@ -132,7 +134,9 @@
           <button class="chip" data-sec="30">0:30</button>
           <button class="chip" data-sec="60" aria-checked="true">1:00</button>
           <button class="chip" data-sec="120">2:00</button>
+          <button class="chip" data-sec="0">無限</button>
         </div>
+        <p class="note" id="vsDurHint" style="margin-top:8px" hidden>無限賽制沒有時限，任一方長按 ✕ 就結束。</p>
       </div>
       <div class="field" style="margin-top:18px">
         <label>算一下的標準</label>
@@ -289,7 +293,11 @@
       <div class="vslivereps display" id="vsLiveReps">0</div>
       <div class="vslivegap mono" id="vsLiveGap">—</div>
     </div>
-    <div id="gauge"><div id="gaugeFill"></div><div class="mark" id="markDown"></div></div>
+    <div id="gauge">
+      <div id="gaugeFill"></div>
+      <div class="mark up" id="markUp"></div>
+      <div class="mark" id="markDown"></div>
+    </div>
     <div id="cadence"></div>
     <div id="status">下到底 → 撐起來，一下算一次</div>
     <!-- 校正過但相機實際拍不到時的退路，刻意做小、放角落避免誤觸 -->

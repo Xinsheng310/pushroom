@@ -1,7 +1,7 @@
 /* 主流程 — 設定、主迴圈、校正流程、倒數、結算、測試模式、導覽 */
 
 import { log, showErr, installGlobalHandlers } from './log.js';
-import { audioOn, audioState, sfx } from './audio.js';
+import { audioOn, audioState, sfx, humStart, humSet, humStop } from './audio.js';
 import { openCamera, loadModel, getStream, getLandmarker, getModelStatus, drawSkeleton } from './pose.js';
 import {
   SIGNALS, bodyFound, setAspect, SETTLE_MS, HOLD_MS, PASS,
@@ -11,7 +11,7 @@ import {
   $, panels, show, isLabOpen, fmt, setRing, setRingStroke, showRing,
   renderCalibReport, addTick, clearTicks, pulse, drawChart,
   renderChecks, renderSignalRows, updateSignalRow, renderMatchList,
-  showCountdown, clearCountdown, flash, rollNumber, replay,
+  showCountdown, clearCountdown, flash, rollNumber, replay, setGaugeMarks, setScan,
 } from './ui.js';
 import { initFirebase, isReady } from './firebase.js';
 import {
@@ -151,8 +151,8 @@ function beginCalibration(){
   $('forceUse').style.display = 'none';
   $('cancelSetup').textContent = '取消';
   $('stepLabel').textContent = 'STEP 1 / 3';
-  $('say').textContent = '正在找你…';
-  $('subSay').textContent = '讓上半身進入畫面';
+  $('say').textContent = '找你';
+  $('subSay').textContent = '上半身進入畫面';
   show('setup');
 }
 
@@ -163,7 +163,7 @@ function calibPrompt(step){
   setRing(0);
   if(step===1){ $('stepLabel').textContent='STEP 2 / 3'; $('say').textContent='撐直手臂'; }
   if(step===2){ $('stepLabel').textContent='STEP 3 / 3'; $('say').textContent='下到最低點'; }
-  $('subSay').textContent = '擺好姿勢…';
+  $('subSay').textContent = '擺好姿勢';
   sfx.ready();
 }
 
@@ -182,7 +182,7 @@ function finishCalibration(){
   if(best && best.score>=PASS){ applyCalib(best); return; }
 
   showRing(false);
-  $('say').textContent = '校正沒過';
+  $('say').textContent = '校正未通過';
   renderCalibReport(report, best, SIGNALS, PASS);
   $('forceUse').style.display = best? 'block' : 'none';
   $('forceUse').onclick = ()=>{ log('使用者強制採用 '+best.key); applyCalib(best); };
@@ -251,7 +251,7 @@ function beginRun(){
   $('count').textContent = '0';
   clearTicks();
   $('clock').classList.remove('warn');
-  $('markDown').style.bottom = (TH.down*100)+'%';
+  setGaugeMarks(TH);
   show('run');
   requestWakeLock();
 }
@@ -274,17 +274,18 @@ function beginVsRun(timer, durationSec, onRep, onEnd, manual=false){
   $('count').textContent = '0';
   clearTicks();
   $('clock').classList.remove('warn');
-  $('markDown').style.bottom = (TH.down*100)+'%';
+  setGaugeMarks(TH);
   /* 手動計數的兩種介面，取捨如下：
        沒校正（例如用電腦當房主）→ 鋪滿中段的大點擊區，因為那是唯一的計數方式
        已校正 → 只給左下角一顆小 +1，當相機實際拍不到時的退路
      不給已校正的人鋪大點擊區，是因為做伏地挺身時手掌誤觸會加出假次數，
      而計數準確是這個 App 的全部意義。 */
-  $('status').textContent = manual ? '按空白鍵或點畫面計數' : '下到底 → 撐起來';
+  $('status').textContent = manual ? '空白鍵或點畫面計數' : '下到底 → 撐起來';
   $('tapCount').hidden = !manual;
   $('manualBtn').hidden = manual;
   show('run');
   requestWakeLock();
+  humStart();
   startVsClock();
 }
 
@@ -295,8 +296,15 @@ function beginVsRun(timer, durationSec, onRep, onEnd, manual=false){
 let vsClockTimer = null;
 function startVsClock(){
   stopVsClock();
+  /* durationSec 0 = 無限賽制：改成正計時，由任一方長按中止結束。
+     不能直接算 remainingTo(0)，那會立刻變負數而秒結束。 */
+  const unlimited = !vsRun.durationSec;
   const tick = ()=>{
     if(S.phase!=='vsrun'){ stopVsClock(); return; }
+    if(unlimited){
+      $('clock').textContent = fmt(vsRun.timer.elapsed());
+      return;
+    }
     const left = vsRun.timer.remainingTo(vsRun.durationSec*1000);
     $('clock').textContent = fmt(Math.max(0,left));
     if(left<=10000){
@@ -316,6 +324,7 @@ function stopVsClock(){
   if(vsClockTimer){ clearInterval(vsClockTimer); vsClockTimer = null; }
   $('tapCount').hidden = true;
   $('manualBtn').hidden = true;
+  humStop();
 }
 
 function abortVsRun(){
@@ -334,8 +343,9 @@ function onFrame(lm, ts){
      這裡只做「有影像時的自動計數」。 */
   if(S.phase==='vsrun'){
     const r = track(lm, ts);
-    if(r===null){ $('status').textContent='看不到你 — 調整位置'; return; }
+    if(r===null){ $('status').textContent='看不到你'; return; }
     $('gaugeFill').style.transform = 'scaleY('+Math.min(1, S.depth)+')';
+    humSet(S.depth);
     if(r==='down') $('status').textContent = '撐起來';
     if(r==='rep'){
       $('count').textContent = S.reps; pulse(); addTick(S.times);
@@ -372,12 +382,16 @@ function onFrame(lm, ts){
     if(!calib.holding){          // 開始取樣
       calib.holding = true; sfx.tick(); setRing(0);
       setRingStroke('var(--cool)');
-      $('subSay').textContent = '撐住不要動';
+      $('subSay').textContent = '撐住';
+      /* 掃描線快掃 —— 讓「緩衝期」與「取樣期」在視覺上明確分開。
+         趴著看的時候光靠環的顏色差別分不出來。 */
+      setScan('fast');
     }
     const p = Math.min(1, (el-SETTLE_MS)/HOLD_MS);
     setRing(p);
     if(lm) collect(lm);
     if(p>=1){
+      setScan('off');
       if(calib.step===1){ calib.step=2; calib.t0=ts; calibPrompt(2); }
       else { sfx.ready(); finishCalibration(); }
     }
@@ -400,18 +414,19 @@ function onFrame(lm, ts){
   }
 
   const r = track(lm, ts);
-  if(r===null){ $('status').textContent='看不到你 — 調整位置'; return; }
+  if(r===null){ $('status').textContent='看不到你'; return; }
   $('gaugeFill').style.transform = 'scaleY('+Math.min(1, S.depth)+')';
+  humSet(S.depth);
   if(r==='down') $('status').textContent = '撐起來';
   if(r==='rep'){
     $('count').textContent = S.reps; pulse(); addTick(S.times);
-    $('status').textContent = '下一下';
+    $('status').textContent = '';
   }
 }
 
 /* ============ 結算 ============ */
 function finish(){
-  S.phase = 'done'; releaseWakeLock(); sfx.end();
+  S.phase = 'done'; releaseWakeLock(); humStop(); sfx.end();
   const dur = cfg.seconds? cfg.seconds*1000 : (S.times.at(-1)||0);
   /* 總數從 0 滾上去，配漸快的音階 —— 單機模式唯一的獎賞時刻 */
   rollNumber('rTotal', S.reps, 720, n=>{ if(n % 2 === 0) sfx.rep(n||1); });
@@ -492,7 +507,7 @@ const bindTh = (id,lbl,key) => $(id).addEventListener('input', e=>{
   TH[key] = +e.target.value;
   myTh[key] = TH[key];          // 記住使用者的偏好，供對戰「自訂」模式使用
   $(lbl).textContent = TH[key].toFixed(2);
-  if(key==='down') $('markDown').style.bottom = (TH.down*100)+'%';
+  setGaugeMarks(TH);
 });
 bindTh('thDown','vDown','down'); bindTh('thUp','vUp','up');
 
@@ -743,7 +758,7 @@ function restoreCalib(){
   $('vUp').textContent   = TH.up.toFixed(2);
   $('thDown').value = TH.down;
   $('thUp').value   = TH.up;
-  $('markDown').style.bottom = (TH.down*100)+'%';
+  setGaugeMarks(TH);
   $('metaSignal').textContent = SIGNALS[c.key]?.label || c.key;
   log('沿用存檔校正：'+(SIGNALS[c.key]?.label||c.key)+'  '+describeAge(c));
   updateCalibChip();
@@ -792,7 +807,7 @@ installVersusHooks({
   applyThresholds: (th)=>{
     if(th){ TH.down = th.down; TH.up = th.up; }
     else   { TH.down = myTh.down; TH.up = myTh.up; }
-    $('markDown').style.bottom = (TH.down*100)+'%';
+    setGaugeMarks(TH);
   },
   /* 「我的」模式要把房主自己調的門檻帶進房間 */
   getMyThresholds: ()=> ({ down:myTh.down, up:myTh.up }),

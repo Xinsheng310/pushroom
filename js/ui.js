@@ -19,9 +19,14 @@ const reduceMotion = ()=>
 
 let lastShown = null;
 
+/* 哪些畫面該開掃描線。run/setup 一律關閉（見 setScan 的說明）。 */
+const SCAN_PANELS = new Set(['wait']);
+
 export const show = name =>{
   const changed = name !== lastShown;
   lastShown = name;
+  /* 切畫面時自動管理掃描線，避免忘記關而讓它跟進計數畫面 */
+  setScan(SCAN_PANELS.has(name) ? 'on' : 'off');
   Object.entries(panels).forEach(([k,el])=>{
     const on = k===name;
     el.classList.toggle('on', on);
@@ -105,6 +110,23 @@ export function addTick(times){
 }
 
 export const clearTicks = ()=> { $('cadence').textContent = ''; };
+
+/* ============ 掃描線 ============
+   只在等待室與校正取樣期啟用。絕不在計數中開 —— 常駐動畫 + difference
+   混色會吃掉推論預算，而掉幀會直接讓使用者少算次數。 */
+export function setScan(mode){
+  const el = $('scan');
+  el.classList.toggle('on', mode === 'on' || mode === 'fast');
+  el.classList.toggle('fast', mode === 'fast');
+}
+
+/* ============ 深度計的門檻標記 ============
+   把兩條判定線畫到刻度尺上。原本散在五處各自設 markDown，
+   集中成一個函式才不會漏掉其中一條。 */
+export function setGaugeMarks(th){
+  $('markDown').style.bottom = (th.down*100)+'%';
+  $('markUp').style.bottom   = (th.up*100)+'%';
+}
 
 /* ============ 倒數演出 ============ */
 /**

@@ -72,12 +72,16 @@ let lobbyMode = DEFAULT_MODE;
 let currentMode = DEFAULT_MODE;
 /** 訪客的準備狀態（本機記錄，實際值以 RTDB 為準） */
 let myReady = false;
+/** 是否已經為「對手出現」演出過（避免每次 render 都重播） */
+let sawOpponent = false;
 
 export function initLobbyUI(){
   $('vsDurations').addEventListener('click', e=>{
     const b = e.target.closest('.chip'); if(!b) return;
     [...$('vsDurations').children].forEach(c=>c.setAttribute('aria-checked', c===b));
     lobbyDuration = +b.dataset.sec;
+    /* 無限賽制要說明怎麼結束，否則使用者不知道 */
+    $('vsDurHint').hidden = lobbyDuration !== 0;
   });
 
   $('vsModes').addEventListener('click', e=>{
@@ -293,6 +297,15 @@ function render(v){
   vs.durationSec = v.durationSec;
 
   const op = v.opponent;
+  /* 對手第一次出現是社交產品的魔法時刻 —— 給聲音與閃光。
+     此時相機推論已關閉（等待室不在 INFER_PHASES），可以盡情演出。 */
+  if(op && !sawOpponent){
+    sawOpponent = true;
+    sfx.joined();
+    flash(.14, 'var(--cool)');
+  }else if(!op){
+    sawOpponent = false;      // 對手離開後再回來要能再觸發一次
+  }
   $('wOpName').textContent = op?.name || '等待中…';
   vs.opName = op?.name || '對手';
 
@@ -303,8 +316,8 @@ function render(v){
   if(!op){
     $('wOpState').textContent = v.isHost ? '尚未加入' : '房主不在？';
     $('waitHint').textContent = v.isHost
-      ? '把房號給朋友，他輸入後就會出現在下面。'
-      : '已加入，按下「我準備好了」告訴房主。';
+      ? '把房號給朋友'
+      : '按下「我準備好了」';
   }else{
     const g = opponentGrace();
     $('wOpState').textContent = !op.online
@@ -327,8 +340,8 @@ function render(v){
   $('wCalibState').textContent = calibrated ? '已校正' : '尚未校正';
   $('wCalibState').classList.toggle('ok', calibrated);
   $('wCalibHint').textContent = calibrated
-    ? '可以自動計數了'
-    : '沒校正也能玩，但要手動按計數';
+    ? '可自動計數'
+    : '未校正 — 需手動計數';
   $('wCalibBtn').textContent = calibrated ? '重新校正' : '校正';
 
   if(v.isHost){
@@ -349,7 +362,7 @@ function render(v){
     $('goMatch').hidden = true;
     $('readyBtn').hidden = false;
     $('readyBtn').textContent = myReady ? '取消準備' : '我準備好了';
-    $('waitNote').textContent = myReady ? '等房主按開始…' : '';
+    $('waitNote').textContent = myReady ? '等房主開始' : '';
   }
 
   /* --- 狀態轉換 --- */
@@ -422,7 +435,7 @@ async function onCounting(v){
   show('setup');
   $('stepLabel').textContent = '';
   $('subSay').textContent = vs.manual
-    ? '這台沒校正過，比賽中按空白鍵或點畫面計數'
+    ? '未校正 — 比賽中點畫面計數'
     : '回到起始姿勢';
 
   /* 用校正後的時間跑倒數，雙方畫面同步 */
@@ -476,6 +489,10 @@ function updateVsLive(){
   /* 只有數字真的變了才 pulse —— 這個函式每幀都會被叫到，
      每幀重播動畫等於常駐動畫，違反「計數中不允許常駐動畫」。 */
   if(vs.opReps !== shownOpReps){
+    /* 對手加分時給一聲低音撥弦。使用者趴著看不到畫面，
+       聽覺是唯一能讓他知道「被追了」的頻道（規格第 7 節）。
+       開場的初始化不發聲，否則一進場就叭一下。 */
+    if(shownOpReps >= 0 && vs.opReps > shownOpReps) sfx.oppRep();
     shownOpReps = vs.opReps;
     el.textContent = vs.opReps;
     el.classList.remove('bump');
@@ -579,6 +596,11 @@ function paintResult(){
   if(won){
     /* 全螢幕反相一次 —— 相機已關閉，這是最便宜的大場面 */
     replay($('stage'), 'invert');
+    sfx.win();
+  }else if(lost){
+    sfx.lose();
+  }else{
+    sfx.draw();
   }
 }
 
