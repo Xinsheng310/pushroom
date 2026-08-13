@@ -127,7 +127,7 @@
       <div class="vsrow">
         <div class="vsside">
           <b id="wMeName" class="mono">—</b>
-          <small>你</small>
+          <small id="wMeState">你</small>
         </div>
         <div class="vsdot mono">VS</div>
         <div class="vsside right">
@@ -136,6 +136,8 @@
         </div>
       </div>
 
+      <!-- 訪客用：告訴房主我準備好了 -->
+      <button class="cta" id="readyBtn" style="width:100%;margin-top:22px" hidden>我準備好了</button>
       <button class="cta" id="goMatch" style="width:100%;margin-top:22px" disabled>等對手加入</button>
       <button class="ghost" id="waitLeave" style="width:100%;margin-top:8px;padding:15px">離開房間</button>
       <p class="note" id="waitNote"></p>

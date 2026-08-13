@@ -11,7 +11,7 @@ import { log, showErr } from './log.js';
 import { $, show, fmt } from './ui.js';
 import { sfx, audioOn } from './audio.js';
 import {
-  createRoom, joinRoom, leaveRoom, onRoomChange, startMatch, setState,
+  createRoom, joinRoom, leaveRoom, onRoomChange, startMatch, setState, setReady,
   pushReps, writeResult, opponentGrace, getCode, getRole, isHost, inRoom,
   installVisibilityHandler, HOST,
 } from './room.js';
@@ -62,6 +62,9 @@ export function openLobby(){
 }
 
 let lobbyDuration = 60;
+/** 訪客的準備狀態（本機記錄，實際值以 RTDB 為準） */
+let myReady = false;
+
 export function initLobbyUI(){
   $('vsDurations').addEventListener('click', e=>{
     const b = e.target.closest('.chip'); if(!b) return;
@@ -114,7 +117,25 @@ export function initLobbyUI(){
   });
 
   $('goMatch').addEventListener('click', ()=>{ audioOn(); hostStart(); });
+
+  /* 訪客的準備按鈕。訪客原本只能乾等，房主也不知道對方好了沒 ——
+     按下後房主那邊的狀態會變「已準備」，開始鈕也才會亮。 */
+  $('readyBtn').addEventListener('click', async ()=>{
+    audioOn();
+    const next = !myReady;
+    $('readyBtn').disabled = true;
+    try{
+      await setReady(next);
+      myReady = next;
+    }catch(e){
+      showErr('狀態更新失敗：'+(e.message||e));
+    }finally{
+      $('readyBtn').disabled = false;
+    }
+  });
+
   $('waitLeave').addEventListener('click', async ()=>{
+    myReady = false;
     await leaveRoom(); show('home');
   });
 
@@ -182,16 +203,18 @@ export async function flushPendingJoin(){
 async function hostStart(){
   if(!isHost()) return;
   $('goMatch').disabled = true;
+  $('goMatch').textContent = '開始中…';
   try{
-    /* 校正在倒數之前做完 —— 校正需要擺姿勢，不能跟倒數搶時間 */
-    if(!hooks.hasCalibration?.()){
-      $('waitNote').textContent = '先做一次校正…';
-      await new Promise(res=> hooks.beginCalibration(res));
-    }
+    /* 直接開始 —— 不把校正擋在前面。
+       原本的寫法是「先校正完才寫 startAt」，結果房主校正失敗或取消時
+       startAt 永遠不會寫入，對手就一直卡在等待室、什麼提示都沒有。
+       校正是「我這台能不能自動計數」的問題，不該綁架對手的體驗。
+       沒校正的人可以用手動計數（空白鍵／點畫面）。 */
     await startMatch(COUNTDOWN_SEC);
   }catch(e){
     showErr(e.message || String(e));
     $('goMatch').disabled = false;
+    $('goMatch').textContent = '開始';
   }
 }
 
@@ -215,25 +238,38 @@ function render(v){
   $('wOpName').textContent = op?.name || '等待中…';
   vs.opName = op?.name || '對手';
 
+  /* 我自己的準備狀態以 RTDB 為準（換裝置或重連後也正確） */
+  myReady = !!v.me?.ready;
+  $('wMeState').textContent = v.isHost ? '你（房主）' : (myReady ? '你 · 已準備' : '你');
+
   if(!op){
     $('wOpState').textContent = v.isHost ? '尚未加入' : '房主不在？';
     $('waitHint').textContent = v.isHost
       ? '把房號給朋友，他輸入後就會出現在下面。'
-      : '已加入，等房主按開始。';
+      : '已加入，按下「我準備好了」告訴房主。';
   }else{
     const g = opponentGrace();
-    $('wOpState').textContent = op.online ? '已就位'
-      : g.expired ? '已離開' : '連線不穩，等待中…';
+    $('wOpState').textContent = !op.online
+      ? (g.expired ? '已離開' : '連線不穩，等待中…')
+      : (op.ready ? '已準備' : '還沒準備');
   }
 
-  /* 只有房主能開始，且要等對手在線（規格第 6.3 節：這同時擋掉亂猜房號的人） */
   if(v.isHost){
-    const ready = !!op && op.online;
-    $('goMatch').disabled = !ready;
-    $('goMatch').textContent = ready ? '開始' : '等對手加入';
+    /* 只有房主能開始（規格第 6.3 節：這同時擋掉亂猜房號的人）。
+       對手在線就能開始 —— 「已準備」是給房主的參考，不是硬性門檻，
+       否則訪客忘了按或按鈕壞掉時整場就開不了。 */
+    $('readyBtn').hidden = true;
+    $('goMatch').hidden = false;
+    const canStart = !!op && op.online;
+    $('goMatch').disabled = !canStart;
+    $('goMatch').textContent = !canStart ? '等對手加入'
+      : op.ready ? '開始' : '開始（對手還沒按準備）';
   }else{
-    $('goMatch').disabled = true;
-    $('goMatch').textContent = '等房主開始';
+    /* 訪客：顯示準備按鈕，不顯示開始鈕 */
+    $('goMatch').hidden = true;
+    $('readyBtn').hidden = false;
+    $('readyBtn').textContent = myReady ? '取消準備' : '我準備好了';
+    $('waitNote').textContent = myReady ? '等房主按開始…' : '';
   }
 
   /* --- 狀態轉換 --- */
@@ -270,15 +306,16 @@ async function onCounting(v){
   vs.opReps = v.opponent?.reps || 0;
   vs.timer = alignedTimer(startAt);
 
-  /* 訪客可能還沒校正 —— 倒數期間來不及，先讓他進場，
-     偵測不到就顯示提示（總比整場不能玩好）。 */
-  if(!hooks.hasCalibration?.()){
-    log('尚未校正，對戰中將無法計數');
-  }
+  /* 沒校正過就無法自動計數。倒數期間來不及做校正（要擺兩個姿勢），
+     所以直接告訴他可以手動計數 —— 總比整場不能玩好。 */
+  vs.manual = !hooks.hasCalibration?.();
+  if(vs.manual) log('尚未校正，本場用手動計數');
 
   show('setup');
   $('stepLabel').textContent = '';
-  $('subSay').textContent = '回到起始姿勢';
+  $('subSay').textContent = vs.manual
+    ? '這台沒校正過，比賽中按空白鍵或點畫面計數'
+    : '回到起始姿勢';
 
   /* 用校正後的時間跑倒數，雙方畫面同步 */
   const tick = ()=>{
@@ -301,7 +338,7 @@ function beginVsMatch(){
   $('vsLive').hidden = false;
   $('vsLiveName').textContent = vs.opName;
   updateVsLive();
-  hooks.beginVsRun(vs.timer, vs.durationSec, onMyRep, onMatchEnd);
+  hooks.beginVsRun(vs.timer, vs.durationSec, onMyRep, onMatchEnd, vs.manual);
 }
 
 /** 我做完一下 */

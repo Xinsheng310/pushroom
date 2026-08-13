@@ -178,12 +178,13 @@ function beginRun(){
    差別只在計時來源（伺服器對齊的 timer）與每下要回報給對手。 */
 const vsRun = { timer:null, durationSec:60, onRep:null, onEnd:null, warned:false };
 
-function beginVsRun(timer, durationSec, onRep, onEnd){
+function beginVsRun(timer, durationSec, onRep, onEnd, manual=false){
   vsRun.timer = timer;
   vsRun.durationSec = durationSec;
   vsRun.onRep = onRep;
   vsRun.onEnd = onEnd;
   vsRun.warned = false;
+  vsRun.manual = manual;
   S.phase = 'vsrun';
   resetCounter();
   S.startAt = performance.now();
@@ -191,7 +192,8 @@ function beginVsRun(timer, durationSec, onRep, onEnd){
   clearTicks();
   $('clock').classList.remove('warn');
   $('markDown').style.bottom = (TH.down*100)+'%';
-  $('status').textContent = '下到底 → 撐起來';
+  /* 沒校正的裝置（例如用電腦當房主）只能手動計數，要講清楚怎麼按 */
+  $('status').textContent = manual ? '按空白鍵或點數字計數' : '下到底 → 撐起來';
   show('run');
   requestWakeLock();
 }
