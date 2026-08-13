@@ -7,7 +7,7 @@
    這支測試鎖住「同一個 mode 一定產生同一組門檻」這件事，
    以及深度計算在不同基準下仍然對齊同樣的判定比例。 */
 
-const { MODES, DEFAULT_MODE, isValidMode, modeLabel, modeHint, thresholdsFor }
+const { MODES, DEFAULT_MODE, isValidMode, modeLabel, modeHint, thresholdsFor, validTh, TH_RANGE }
   = await import('../js/calibmode.js');
 
 let pass=0, fail=0;
@@ -18,8 +18,8 @@ const check=(name,ok,detail='')=>{
 
 /* ================= 模式定義 ================= */
 console.log('\n=== 模式定義 ===');
-check('有 standard / loose / custom 三種',
-      ['standard','loose','custom'].every(m=>m in MODES));
+check('有 standard / loose / hostth / custom 四種',
+      ['standard','loose','hostth','custom'].every(m=>m in MODES));
 check('預設是 standard', DEFAULT_MODE==='standard');
 check('標準 = 實機調校過的預設值 0.72 / 0.32',
       MODES.standard.th.down===0.72 && MODES.standard.th.up===0.32,
@@ -49,7 +49,7 @@ for(const [key,m] of Object.entries(MODES)){
 
 /* ================= 未知模式的容錯 ================= */
 console.log('\n=== 容錯 ===');
-check('isValidMode 認得三種', ['standard','loose','custom'].every(isValidMode));
+check('isValidMode 認得四種', ['standard','loose','hostth','custom'].every(isValidMode));
 check('isValidMode 拒絕亂填', !isValidMode('hacked') && !isValidMode(''));
 check('未知模式退回標準門檻',
       JSON.stringify(thresholdsFor('hacked'))===JSON.stringify(MODES.standard.th));
@@ -60,6 +60,47 @@ check('未知模式的說明退回標準', modeHint('hacked')===MODES.standard.h
 /* 原型污染：不可透過 __proto__ 之類的鍵取到東西 */
 check('__proto__ 不被當成合法模式', !isValidMode('__proto__'));
 check('constructor 不被當成合法模式', !isValidMode('constructor'));
+
+/* ================= 房主門檻模式 ================= */
+console.log('\n=== 房主門檻（hostth）===');
+const hostTh = { down:0.66, up:0.28 };
+check('★ 套用房主帶來的門檻',
+      JSON.stringify(thresholdsFor('hostth', hostTh))===JSON.stringify(hostTh),
+      JSON.stringify(thresholdsFor('hostth', hostTh)));
+check('★ 雙方讀同一組 hostTh 得到相同門檻',
+      JSON.stringify(thresholdsFor('hostth',hostTh))===JSON.stringify(thresholdsFor('hostth',hostTh)));
+
+/* 房間裡的值可能沒寫進去、或被改壞。退回標準比套用壞值安全：
+   壞值（例如 down<up）會讓狀態機永遠停在某一邊，整場判不到一下。 */
+const STD = JSON.stringify(MODES.standard.th);
+check('hostTh 缺失 → 退回標準', JSON.stringify(thresholdsFor('hostth', null))===STD);
+check('hostTh 為 undefined → 退回標準', JSON.stringify(thresholdsFor('hostth'))===STD);
+check('hostTh down<up（顛倒）→ 退回標準',
+      JSON.stringify(thresholdsFor('hostth',{down:0.2,up:0.8}))===STD);
+check('hostTh 超出範圍（down 過大）→ 退回標準',
+      JSON.stringify(thresholdsFor('hostth',{down:1.5,up:0.3}))===STD);
+check('hostTh 超出範圍（down 過小）→ 退回標準',
+      JSON.stringify(thresholdsFor('hostth',{down:0.1,up:0.05}))===STD);
+check('hostTh 非數字 → 退回標準',
+      JSON.stringify(thresholdsFor('hostth',{down:'0.7',up:0.3}))===STD);
+check('hostTh 為 NaN → 退回標準',
+      JSON.stringify(thresholdsFor('hostth',{down:NaN,up:0.3}))===STD);
+check('hostTh 為空物件 → 退回標準',
+      JSON.stringify(thresholdsFor('hostth',{}))===STD);
+
+console.log('\n=== validTh ===');
+check('合法門檻通過', validTh({down:0.72,up:0.32}));
+check('邊界值通過（down 0.4 / up 0.6 不成立因 down<up）', !validTh({down:0.4,up:0.6}));
+check('down 上界 0.95 通過', validTh({down:0.95,up:0.5}));
+check('up 下界 0.05 通過', validTh({down:0.5,up:0.05}));
+check('down 超過上界不通過', !validTh({down:0.96,up:0.3}));
+check('up 低於下界不通過', !validTh({down:0.7,up:0.04}));
+check('null 不通過', !validTh(null));
+check('down==up 不通過', !validTh({down:0.5,up:0.5}));
+check('Infinity 不通過', !validTh({down:Infinity,up:0.3}));
+check('範圍常數與安全規則一致',
+      TH_RANGE.down[0]===0.4 && TH_RANGE.down[1]===0.95
+      && TH_RANGE.up[0]===0.05 && TH_RANGE.up[1]===0.6);
 
 /* ================= 公平性：同模式 → 同門檻 ================= */
 console.log('\n=== 公平性核心 ===');

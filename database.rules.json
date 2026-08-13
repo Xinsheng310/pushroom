@@ -101,7 +101,20 @@
         },
         "calibMode": {
           ".write": "auth != null && root.child('rooms').child($code).child('host').child('uid').val() == auth.uid",
-          ".validate": "newData.val() == 'standard' || newData.val() == 'loose' || newData.val() == 'custom'"
+          ".validate": "newData.val() == 'standard' || newData.val() == 'loose' || newData.val() == 'custom' || newData.val() == 'hostth'"
+        },
+        "hostTh": {
+          ".write": "auth != null && root.child('rooms').child($code).child('host').child('uid').val() == auth.uid",
+          ".validate": "newData.hasChildren(['down','up'])",
+          "down": {
+            ".validate": "newData.isNumber() && newData.val() >= 0.4 && newData.val() <= 0.95"
+          },
+          "up": {
+            ".validate": "newData.isNumber() && newData.val() >= 0.05 && newData.val() <= 0.6"
+          },
+          "$other": {
+            ".validate": false
+          }
         }
       }
     }

@@ -21,6 +21,9 @@ import {
   initLobbyUI, openLobby, installVersusHooks, isVersusActive,
   autoJoinFromUrl, flushPendingJoin, refreshWaitRoom,
 } from './versus.js';
+import {
+  loadCalib, saveCalib, clearCalib, isStale, matchesCamera, describeAge,
+} from './calibstore.js';
 
 installGlobalHandlers();
 
@@ -37,7 +40,17 @@ $('durations').addEventListener('click', e=>{
 const bindSwitch = (el,key,after) => el.addEventListener('click',()=>{
   cfg[key] = !cfg[key]; el.setAttribute('aria-checked', cfg[key]); after && after();
 });
-bindSwitch($('swCam'), 'front', ()=> openCamera(cfg, video, skel));
+bindSwitch($('swCam'), 'front', ()=>{
+  openCamera(cfg, video, skel);
+  /* 換鏡頭後基準完全不同（畫面鏡像、拍攝距離都變了），
+     舊校正不能用，清掉並提示重新校正。 */
+  if(S.key){
+    S.key = null; S.ema = null;
+    $('metaSignal').textContent = '—';
+    log('已換鏡頭，需重新校正');
+  }
+  updateCalibChip();
+});
 bindSwitch($('swSkel'), 'skeleton', ()=>{
   if(!cfg.skeleton) sctx.clearRect(0,0,skel.width,skel.height);
 });
@@ -128,6 +141,13 @@ function applyCalib(best){
   $('metaSignal').textContent = SIGNALS[best.key].label;
   $('forceUse').style.display = 'none';
   log('採用 '+SIGNALS[best.key].label+'  上='+best.up.toFixed(1)+' 下='+best.down.toFixed(1)+' 分數='+best.score.toFixed(1));
+  /* 存起來下次自動帶入。門檻存「使用者自己的」而非當下的 TH ——
+     對戰可能把 TH 暫時改成標準/寬鬆，那不該被記成他的偏好。 */
+  saveCalib({
+    key:best.key, up:best.up, down:best.down, score:best.score,
+    thDown:myTh.down, thUp:myTh.up, front:cfg.front,
+  });
+  updateCalibChip();
   if(calibReturn==='lab'){
     S.phase = 'lab';
     resetCounter(); S.startAt = performance.now();
@@ -523,6 +543,60 @@ setInterval(()=>{
   if(isLabOpen() && !getLandmarker()) renderChecks(buildChecks());
 }, 1000);
 
+/* ============ 校正存檔 ============ */
+/**
+ * 啟動時把存檔帶回 S。基準是裝置相依的，所以換鏡頭的存檔不能用。
+ * 過期（超過一天）仍然帶入 —— 不準也比完全不能用好，
+ * 但會在首頁提示，讓使用者自己決定要不要重校。
+ */
+function restoreCalib(){
+  const c = loadCalib();
+  if(!c) return false;
+  if(!matchesCamera(c, cfg.front)){
+    log('存檔是'+(c.front?'前':'後')+'鏡頭的，與目前設定不符，需重新校正');
+    updateCalibChip();
+    return false;
+  }
+  S.key = c.key; S.up = c.up; S.down = c.down; S.ema = null;
+  myTh.down = c.thDown; myTh.up = c.thUp;
+  TH.down = c.thDown;   TH.up = c.thUp;
+  $('vDown').textContent = TH.down.toFixed(2);
+  $('vUp').textContent   = TH.up.toFixed(2);
+  $('thDown').value = TH.down;
+  $('thUp').value   = TH.up;
+  $('markDown').style.bottom = (TH.down*100)+'%';
+  $('metaSignal').textContent = SIGNALS[c.key]?.label || c.key;
+  log('沿用存檔校正：'+(SIGNALS[c.key]?.label||c.key)+'  '+describeAge(c));
+  updateCalibChip();
+  return true;
+}
+
+/** 首頁顯示校正狀態，讓使用者知道「這次不用再校正」或「該重校了」 */
+function updateCalibChip(){
+  const c = loadCalib();
+  const chip = $('calibChip');
+  if(!c || !matchesCamera(c, cfg.front) || !S.key){
+    chip.hidden = true;
+    return;
+  }
+  chip.hidden = false;
+  const stale = isStale(c);
+  $('calibChipText').textContent =
+    (SIGNALS[c.key]?.label || c.key) + ' · ' + describeAge(c);
+  $('calibChipText').classList.toggle('warn', stale);
+  $('calibChipHint').textContent = stale
+    ? '手機位置若改變過，建議重新校正'
+    : '按開始會直接計時，不用再校正';
+}
+
+$('calibClear').addEventListener('click', ()=>{
+  clearCalib();
+  S.key = null; S.up = 0; S.down = 0; S.ema = null;
+  $('metaSignal').textContent = '—';
+  updateCalibChip();
+  refreshWaitRoom();
+});
+
 /* ============ 對戰接線 ============ */
 installVersusHooks({
   hasCalibration: ()=> !!S.key,
@@ -541,6 +615,8 @@ installVersusHooks({
     else   { TH.down = myTh.down; TH.up = myTh.up; }
     $('markDown').style.bottom = (TH.down*100)+'%';
   },
+  /* 「我的」模式要把房主自己調的門檻帶進房間 */
+  getMyThresholds: ()=> ({ down:myTh.down, up:myTh.up }),
   beginVsRun,
   abortRun: abortVsRun,
 });
@@ -593,6 +669,9 @@ onAuthChange(user=>{
     flushPendingJoin();
   }
 });
+
+/* 帶入上次的校正 —— 校正要擺兩個姿勢等 8 秒，能省就省 */
+restoreCalib();
 
 openCamera(cfg, video, skel);
 loop();

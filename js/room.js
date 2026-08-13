@@ -74,6 +74,7 @@ function view(){
     startAt: d.startAt || 0,
     countdownSec: d.countdownSec ?? 3,
     calibMode: d.calibMode ?? 'standard',
+    hostTh: d.hostTh ?? null,
     durationSec: d.config?.durationSec ?? 60,
     result: d.result || null,
     me: meRaw,
@@ -93,7 +94,7 @@ function view(){
  * @param {number} durationSec
  * @returns {Promise<string>} 房號
  */
-export async function createRoom(me, durationSec, calibMode='standard'){
+export async function createRoom(me, durationSec, calibMode='standard', hostTh=null){
   requireReady();
   const { db: D } = getSdk();
   const rtdb = getRtdb();
@@ -113,6 +114,10 @@ export async function createRoom(me, durationSec, calibMode='standard'){
       createdAt: D.serverTimestamp(),
     });
     await D.set(D.ref(rtdb,`rooms/${code}/host`), sideData(me));
+    if(hostTh){
+      await D.set(D.ref(rtdb,`rooms/${code}/hostTh`),
+        { down:hostTh.down, up:hostTh.up });
+    }
     await D.set(D.ref(rtdb,`rooms/${code}/calibMode`), calibMode);
     await D.set(D.ref(rtdb,`rooms/${code}/state`), 'waiting');
 
@@ -243,10 +248,20 @@ export async function setReady(ready){
   await D.set(D.ref(getRtdb(), `rooms/${state.code}/${state.role}/ready`), !!ready);
 }
 
-/** 房主設定本場的校正模式。雙方套用同一組門檻 → 公平性。 */
-export async function setCalibMode(mode){
+/**
+ * 房主設定本場的校正模式。雙方套用同一組門檻 → 公平性。
+ * @param {string} mode
+ * @param {{down:number,up:number}} [hostTh] hostth 模式時要一起寫入房主的門檻
+ */
+export async function setCalibMode(mode, hostTh){
   if(state.role !== HOST || !state.code) return;
   const { db: D } = getSdk();
+  /* 先寫門檻再寫模式 —— 否則訪客可能在門檻還沒到時就讀到 hostth，
+     拿不到值只能退回標準，雙方判定標準就不一致了。 */
+  if(hostTh){
+    await D.set(D.ref(getRtdb(), `rooms/${state.code}/hostTh`),
+      { down:hostTh.down, up:hostTh.up });
+  }
   await D.set(D.ref(getRtdb(), `rooms/${state.code}/calibMode`), mode);
   log('校正模式設為 '+mode);
 }

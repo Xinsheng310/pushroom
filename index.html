@@ -71,6 +71,14 @@
     </div>
 
     <div>
+      <!-- 有存檔時顯示，讓使用者知道不用再校正 -->
+      <div id="calibChip" class="calibchip" hidden>
+        <div>
+          <span class="mono" id="calibChipText">—</span>
+          <small id="calibChipHint">—</small>
+        </div>
+        <button class="ghost mini" id="calibClear">清除</button>
+      </div>
       <button class="cta" id="start" disabled>載入模型中…</button>
       <div class="row" style="margin-top:8px">
         <button class="ghost" id="versusBtn" style="flex:1;padding:16px" hidden>跟朋友對戰</button>
@@ -99,7 +107,8 @@
         <div class="chips" id="vsModes">
           <button class="chip" data-mode="standard" aria-checked="true">標準</button>
           <button class="chip" data-mode="loose">寬鬆</button>
-          <button class="chip" data-mode="custom">自訂</button>
+          <button class="chip" data-mode="hostth">我的</button>
+          <button class="chip" data-mode="custom">各自</button>
         </div>
         <p class="note" id="modeHint" style="margin-top:8px">要下到接近最低點才算一下</p>
       </div>

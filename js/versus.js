@@ -26,9 +26,11 @@ const COUNTDOWN_SEC = 3;
 /* 由 main.js 注入 —— 對戰需要驅動校正與計數，那些函式住在 main.js */
 let hooks = {
   beginCalibration: null,   // (onDone) => void
-  beginVsRun: null,         // (timer, durationSec, onRep, onEnd) => void
+  beginVsRun: null,         // (timer, durationSec, onRep, onEnd, manual) => void
   abortRun: null,           // () => void
   hasCalibration: null,     // () => boolean
+  applyThresholds: null,    // (th|null) => void
+  getMyThresholds: null,    // () => {down,up}  房主自己調的門檻
 };
 export function installVersusHooks(h){ hooks = { ...hooks, ...h }; }
 
@@ -88,7 +90,8 @@ export function initLobbyUI(){
     audioOn();
     const order = Object.keys(MODES);
     const next = order[(order.indexOf(currentMode)+1) % order.length];
-    try{ await setCalibMode(next); }
+    const th = next==='hostth' ? hooks.getMyThresholds?.() : null;
+    try{ await setCalibMode(next, th); }
     catch(e){ showErr('改不了模式：'+(e.message||e)); }
   });
 
@@ -104,7 +107,9 @@ export function initLobbyUI(){
     $('createRoom').disabled = true;
     $('createRoom').textContent = '開房中…';
     try{
-      const code = await createRoom(me, lobbyDuration, lobbyMode);
+      /* 選「房主的標準」時要把自己的門檻一起帶上去 */
+      const th = lobbyMode==='hostth' ? hooks.getMyThresholds?.() : null;
+      const code = await createRoom(me, lobbyDuration, lobbyMode, th);
       vs.durationSec = lobbyDuration;
       show('wait');
       log('房號 '+code);
@@ -286,7 +291,11 @@ function render(v){
   /* --- 本場判定標準（雙方一致） --- */
   currentMode = v.calibMode || DEFAULT_MODE;
   $('wModeName').textContent = modeLabel(currentMode) + (v.isHost ? '' : '（房主設定）');
-  $('wModeHint').textContent = modeHint(currentMode);
+  /* 顯示實際門檻數值 —— 「房主的標準」光看名字不知道嚴不嚴 */
+  const shownTh = thresholdsFor(currentMode, v.hostTh);
+  $('wModeHint').textContent = shownTh
+    ? `${modeHint(currentMode)}（下壓 ${shownTh.down.toFixed(2)}）`
+    : modeHint(currentMode);
   $('wModeChange').hidden = !v.isHost;
 
   /* --- 我自己的校正狀態 --- */
@@ -361,7 +370,7 @@ async function onCounting(v){
   /* 套用本場的判定門檻。基準（up/down）各自校正 —— 那是裝置相依的數值，
      共用會完全錯亂；門檻是比例值，統一才公平。詳見 calibmode.js 的說明。
      自訂模式回傳 null，代表沿用各自在測試模式調的門檻。 */
-  const th = thresholdsFor(v.calibMode || DEFAULT_MODE);
+  const th = thresholdsFor(v.calibMode || DEFAULT_MODE, v.hostTh);
   hooks.applyThresholds?.(th);
   log('本場判定：'+modeLabel(v.calibMode||DEFAULT_MODE)
       + (th ? ` (下壓 ${th.down} / 回頂 ${th.up})` : '（各自自訂）'));
