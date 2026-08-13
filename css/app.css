@@ -214,7 +214,10 @@ body{
 #manualBtn:active{border-color:var(--signal);color:var(--signal)}
 
 #gauge{position:absolute;right:16px;top:26%;bottom:26%;width:8px;border:1px solid var(--line);border-radius:99px;overflow:hidden}
-#gaugeFill{position:absolute;left:0;right:0;bottom:0;height:0%;background:var(--cool);transition:height .06s linear}
+/* 用 transform 而非 height：height transition 每幀觸發 reflow，
+   scaleY 只走合成器。計數中是最嚴苛的效能情境，這是免費的改善。 */
+#gaugeFill{position:absolute;left:0;right:0;bottom:0;height:100%;background:var(--cool);
+  transform:scaleY(0);transform-origin:bottom;transition:transform .06s linear;will-change:transform}
 #gauge .mark{position:absolute;left:-5px;right:-5px;height:1px;background:rgba(255,255,255,.4)}
 #cadence{position:absolute;left:16px;bottom:calc(var(--safe-b) + 74px);display:flex;align-items:flex-end;gap:3px;height:36px}
 .tick{width:4px;background:var(--signal);opacity:.85;border-radius:1px}

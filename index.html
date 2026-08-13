@@ -371,6 +371,15 @@
       </div>
 
       <div class="card">
+        <div class="cardtitle mono">效能</div>
+        <div class="mono" id="perfLine" style="font-size:12px;line-height:1.7;color:var(--cool)">尚未取樣</div>
+        <p class="hint">推論 / 幀時間顯示 <b>p50 / p95</b>（毫秒）。長幀 = 超過 45ms + 超過 80ms 的次數。<br>
+          掉幀會讓動作的上下邊緣被錯過而少算次數，所以看的是 p95 而不是平均。
+          加了新特效後比對長幀次數有沒有增加。</p>
+        <button class="ghost mini" id="perfResetBtn" style="margin-top:4px">歸零重測</button>
+      </div>
+
+      <div class="card">
         <div class="cardtitle mono">紀錄</div>
         <pre class="log" id="log">—</pre>
       </div>

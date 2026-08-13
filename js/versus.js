@@ -32,6 +32,7 @@ let hooks = {
   hasCalibration: null,     // () => boolean
   applyThresholds: null,    // (th|null) => void
   getMyThresholds: null,    // () => {down,up}  房主自己調的門檻
+  warmUpInference: null,    // () => void  倒數期間先把推論打開暖機
 };
 export function installVersusHooks(h){ hooks = { ...hooks, ...h }; }
 
@@ -386,6 +387,10 @@ async function onCounting(v){
   /* startAt 是「按下開始」的伺服器時刻，加上倒數長度才是真正起跑時間。
      countdownSec 由房主寫入，雙方讀同一個值 → 起跑點必然一致。 */
   const startAt = v.startAt + (v.countdownSec ?? COUNTDOWN_SEC)*1000;
+
+  /* 倒數期間就把推論打開暖機 —— 從暫停切回推論的第一幀會慢 2–3 倍，
+     若等到 GO 才恢復，第一下很可能漏算。 */
+  hooks.warmUpInference?.();
 
   vs.active = true;
   vs.ended = false;

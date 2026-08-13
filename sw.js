@@ -14,7 +14,7 @@
 
    4. 換版時清掉舊快取，避免舊 JS 與新 HTML 混搭。 */
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = 'reproom-' + VERSION;
 
 /* 這些是「App 的骨架」，安裝時就抓下來 */
@@ -39,6 +39,7 @@ const PRECACHE = [
   './js/versus.js',
   './js/calibmode.js',
   './js/calibstore.js',
+  './js/perf.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

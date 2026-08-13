@@ -97,7 +97,28 @@ export async function loadModel(onReady){
 }
 
 /* ============ 骨架繪製 ============ */
-export function drawSkeleton(sctx, skel, video, lm){
+
+/* 骨架顏色隨下壓深度從冷青燒到訊號橘。
+   預先建表避免每幀組字串（規格第 7 節：訓練中不做重度運算）。
+   這是「免費演出」：同一個 canvas 的同一次繪製，額外成本趨近零，
+   但使用者趴在地上看到的是自己的身體在下壓時整條骨架燒起來 ——
+   而且它同時是功能性回饋：告訴他「系統看到你下去了」。 */
+const DEPTH_STEPS = 16;
+const DEPTH_COLORS = Array.from({length:DEPTH_STEPS+1}, (_,i)=>{
+  const t = i/DEPTH_STEPS;
+  /* 冷青 53,224,212 → 訊號橘 255,90,31 */
+  const r = Math.round( 53 + (255- 53)*t);
+  const g = Math.round(224 + ( 90-224)*t);
+  const b = Math.round(212 + ( 31-212)*t);
+  return `rgba(${r},${g},${b},${(0.55 + 0.3*t).toFixed(2)})`;
+});
+const DEPTH_WIDTHS = Array.from({length:DEPTH_STEPS+1}, (_,i)=> 2.5 + 2*(i/DEPTH_STEPS));
+
+/**
+ * @param {number} [depth] 0~1.25 的下壓深度，用來決定骨架顏色。
+ *                         未提供時用預設冷青（例如校正中還沒有基準）。
+ */
+export function drawSkeleton(sctx, skel, video, lm, depth){
   const dpr = Math.min(devicePixelRatio||1, 2);
   const cw = skel.clientWidth, ch = skel.clientHeight;
   if(skel.width !== cw*dpr){ skel.width = cw*dpr; skel.height = ch*dpr; }
@@ -107,7 +128,12 @@ export function drawSkeleton(sctx, skel, video, lm){
   const vw = video.videoWidth, vh = video.videoHeight; if(!vw) return;
   const k = Math.max(cw/vw, ch/vh), dx = (cw-vw*k)/2, dy = (ch-vh*k)/2;
   const P = i => [dx+lm[i].x*vw*k, dy+lm[i].y*vh*k];
-  sctx.strokeStyle = 'rgba(53,224,212,.55)'; sctx.lineWidth = 2.5; sctx.lineCap = 'round';
+  /* 深度 0~1 映到查表；沒有深度資訊時用最淺的那格（冷青） */
+  const di = depth == null ? 0
+    : Math.max(0, Math.min(DEPTH_STEPS, Math.round(depth*DEPTH_STEPS)));
+  sctx.strokeStyle = DEPTH_COLORS[di];
+  sctx.lineWidth = DEPTH_WIDTHS[di];
+  sctx.lineCap = 'round';
   sctx.beginPath();
   for(const [a,b] of CONNS){
     if(vis(lm,a)>.5 && vis(lm,b)>.5){ const A=P(a), B=P(b); sctx.moveTo(A[0],A[1]); sctx.lineTo(B[0],B[1]); }

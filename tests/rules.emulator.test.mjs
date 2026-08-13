@@ -36,6 +36,15 @@ const root = join(here, '..');
 
 const ALICE = 'uid_alice', BOB = 'uid_bob', EVE = 'uid_eve';
 
+/* emulator 沒在跑就跳過。相依套件裝了但沒起 emulator 時，
+   initializeTestEnvironment 會拋錯 —— 那不是規則有問題，
+   不該讓 run-all.mjs 顯示成失敗。 */
+if(!process.env.FIREBASE_DATABASE_EMULATOR_HOST && !process.env.FIRESTORE_EMULATOR_HOST){
+  console.log('略過：emulator 未啟動。執行方式：');
+  console.log('  powershell -File tests/run-emulator.ps1');
+  process.exit(0);
+}
+
 const env = await initializeTestEnvironment({
   projectId: 'reproom-rules-test',
   firestore: { rules: readFileSync(join(root,'firestore.rules'),'utf8') },

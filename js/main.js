@@ -25,6 +25,7 @@ import {
 import {
   loadCalib, saveCalib, clearCalib, isStale, matchesCamera, describeAge,
 } from './calibstore.js';
+import { perfInfer, perfFrame, perfGap, perfReset, perfLine } from './perf.js';
 
 installGlobalHandlers();
 
@@ -62,23 +63,73 @@ loadModel(ok=>{
   $('start').textContent = ok? '開始' : '模型載入失敗';
 });
 
-/* ============ 主迴圈 ============ */
-let lastTs = -1;
+/* ============ 主迴圈 ============
+
+   姿勢推論是整個 App 最耗電的部分（中階 Android 每次 12–22ms 的 GPU 滿載）。
+   這裡有兩道閘門，缺一不可：
+
+   1. 只在需要計數的相位推論。
+      規格第 7 節：「非偵測時段相機推論應完全關閉，GPU 全給動畫」。
+      首頁、大廳、等待室、結算都不需要知道你的姿勢。
+
+   2. 同一個 video frame 只推論一次。
+      相機給 30fps 但螢幕是 60Hz，rAF 會跑 60 次 —— 一半是重複影格。
+      原本寫 `ts===lastTs` 想去重，但 performance.now() 每次都不同，
+      那個判斷永遠不成立，等於一半的推論是純浪費。
+      改用 video.currentTime 判斷是否為新影格。
+
+   刻意不做的事：不 close() landmarker、不 stop() video track。
+   重建 landmarker 要重編 GPU shader，冷啟 300–900ms；
+   重開相機在 iOS 要重新授權且曝光收斂要 0.5–2 秒。
+   兩者都會讓「倒數結束的第一下」漏算。保留實例、只停止呼叫它。 */
+
+/** 需要姿勢推論的相位。
+    倒數（countdown）也要推論 —— 不是為了計數，是為了「暖機」：
+    從暫停切回推論時第一次 detectForVideo 會慢 2–3 倍（GPU texture 重新配置），
+    若在 GO 的瞬間才恢復，第一下很可能漏算。倒數 3 秒剛好夠熱起來。 */
+const INFER_PHASES = new Set(['calib','countdown','run','vsrun','lab']);
+
+let lastFrameTime = -1;    // 上次推論的 video.currentTime
+let skelCleared = false;
+
+function needsInference(){
+  return INFER_PHASES.has(S.phase) || isLabOpen();
+}
+
 function loop(){
   requestAnimationFrame(loop);
   const landmarker = getLandmarker();
   if(!landmarker || video.readyState<2) return;
-  const ts = performance.now();
-  if(ts===lastTs) return; lastTs = ts;
 
+  if(!needsInference()){
+    /* 不推論。順手清掉骨架，否則畫面會留著最後一幀的殘影。 */
+    if(!skelCleared && skel.width){
+      sctx.clearRect(0,0,skel.width,skel.height);
+      skelCleared = true;
+      perfGap();          // 暫停期間不要被算成一個超長幀
+    }
+    return;
+  }
+  if(skelCleared){ skelCleared = false; perfGap(); }
+
+  /* 同一影格不重複推論。currentTime 只在相機給新影格時前進。 */
+  const ft = video.currentTime;
+  if(ft === lastFrameTime) return;
+  lastFrameTime = ft;
+
+  const ts = performance.now();
+  const t0 = ts;
   let res; try{ res = landmarker.detectForVideo(video, ts); }catch(e){ return; }
+  perfInfer(performance.now() - t0);
+
   const lm = res?.landmarks?.[0];
   setAspect(video.videoWidth/video.videoHeight);
 
-  if(cfg.skeleton) drawSkeleton(sctx, skel, video, lm);
+  if(cfg.skeleton) drawSkeleton(sctx, skel, video, lm, S.depth);
   else if(skel.width) sctx.clearRect(0,0,skel.width,skel.height);
 
   onFrame(lm ?? null, ts);
+  perfFrame(ts);
 }
 
 /* ============ 校正 ============ */
@@ -280,7 +331,7 @@ function onFrame(lm, ts){
   if(S.phase==='vsrun'){
     const r = track(lm, ts);
     if(r===null){ $('status').textContent='看不到你 — 調整位置'; return; }
-    $('gaugeFill').style.height = Math.min(100, S.depth*100)+'%';
+    $('gaugeFill').style.transform = 'scaleY('+Math.min(1, S.depth)+')';
     if(r==='down') $('status').textContent = '撐起來';
     if(r==='rep'){
       $('count').textContent = S.reps; pulse(); addTick(S.times);
@@ -346,7 +397,7 @@ function onFrame(lm, ts){
 
   const r = track(lm, ts);
   if(r===null){ $('status').textContent='看不到你 — 調整位置'; return; }
-  $('gaugeFill').style.height = Math.min(100, S.depth*100)+'%';
+  $('gaugeFill').style.transform = 'scaleY('+Math.min(1, S.depth)+')';
   if(r==='down') $('status').textContent = '撐起來';
   if(r==='rep'){
     $('count').textContent = S.reps; pulse(); addTick(S.times);
@@ -409,7 +460,11 @@ function labUpdate(lm, ts){
     updateSignalRow(k, lm? SIGNALS[k].get(lm) : null, S.key===k);
   }
   $('fpsNow').textContent = ' · '+fps+' fps';
-  if(ts-(labUpdate.t||0)>800){ labUpdate.t = ts; renderChecks(buildChecks()); }
+  if(ts-(labUpdate.t||0)>800){
+    labUpdate.t = ts;
+    renderChecks(buildChecks());
+    $('perfLine').textContent = perfLine();
+  }
 }
 
 $('labBtn').addEventListener('click', async ()=>{
@@ -423,6 +478,9 @@ $('labExit').addEventListener('click',()=>{ S.phase='idle'; show('home'); });
 $('labCalib').addEventListener('click',()=>{ audioOn(); calibReturn='lab'; beginCalibration(); });
 $('labReset').addEventListener('click',()=>{
   resetCounter(); $('labCount').textContent='0'; log('計數歸零');
+});
+$('perfResetBtn').addEventListener('click',()=>{
+  perfReset(); $('perfLine').textContent = '尚未取樣'; log('效能統計歸零');
 });
 
 const bindTh = (id,lbl,key) => $(id).addEventListener('input', e=>{
@@ -695,6 +753,8 @@ installVersusHooks({
   },
   /* 「我的」模式要把房主自己調的門檻帶進房間 */
   getMyThresholds: ()=> ({ down:myTh.down, up:myTh.up }),
+  /* 倒數開始就恢復推論，讓 GPU 熱起來（見 INFER_PHASES 的說明） */
+  warmUpInference: ()=>{ if(S.phase==='idle') S.phase = 'countdown'; },
   beginVsRun,
   abortRun: abortVsRun,
 });
