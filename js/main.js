@@ -1,6 +1,6 @@
 /* 主流程 — 設定、主迴圈、校正流程、倒數、結算、測試模式、導覽 */
 
-import { log, installGlobalHandlers } from './log.js';
+import { log, showErr, installGlobalHandlers } from './log.js';
 import { audioOn, audioState, sfx } from './audio.js';
 import { openCamera, loadModel, getStream, getLandmarker, getModelStatus, drawSkeleton } from './pose.js';
 import {
@@ -12,6 +12,11 @@ import {
   renderCalibReport, addTick, clearTicks, pulse, drawChart,
   renderChecks, renderSignalRows, updateSignalRow,
 } from './ui.js';
+import { initFirebase, isReady } from './firebase.js';
+import {
+  watchAuth, onAuthChange, signIn, signOut, setDisplayName,
+  validName, usingDefaultName, addSession, getProfile, NAME_MAX,
+} from './auth.js';
 
 installGlobalHandlers();
 
@@ -240,6 +245,8 @@ function finish(){
   $('rFast').textContent = fast;
   drawChart(S.times, dur);
   show('result');
+  /* 已登入就累加個人戰績。失敗不影響結算畫面（auth.js 內部已吞掉錯誤）。 */
+  addSession(S.reps);
 }
 
 /* ============ 螢幕恆亮 ============ */
@@ -314,14 +321,107 @@ document.querySelectorAll('[data-sfx]').forEach(b=>b.addEventListener('click',()
   k==='rep'? sfx.rep(1) : sfx[k]();
 }));
 
-/* ============ 導覽 ============ */
-$('start').addEventListener('click', async ()=>{
+/* ============ 首次使用提醒 ============
+   規格第 8 節：顯示簡短運動免責提醒，並明確告知影像在本機處理。 */
+const CONSENT_KEY = 'reproom.consent.v1';
+const consented = ()=>{ try{ return localStorage.getItem(CONSENT_KEY)==='1'; }catch(e){ return false; } };
+const setConsented = ()=>{ try{ localStorage.setItem(CONSENT_KEY,'1'); }catch(e){} };
+
+/* 同意後要接著做的事（例如「按了開始但還沒同意」→ 同意完直接開始） */
+let afterConsent = null;
+function requireConsent(next){
+  if(consented()){ next(); return; }
+  afterConsent = next;
+  show('consent');
+}
+$('consentOk').addEventListener('click', ()=>{
+  audioOn(); setConsented();
+  const next = afterConsent; afterConsent = null;
+  next ? next() : show('home');
+});
+
+/* ============ 帳號 UI ============ */
+function renderAccount(user, prof){
+  /* Firebase 沒就緒（設定未填 / CDN 掛）就整塊隱藏，維持純單機體驗 */
+  $('account').hidden = !isReady();
+  const signedIn = !!user;
+  $('acctOut').hidden = signedIn;
+  $('acctIn').hidden  = !signedIn;
+  if(signedIn && prof){
+    $('acctName').textContent = prof.displayName;
+    const s = prof.stats || {};
+    $('acctStats').textContent =
+      `累計 ${s.totalReps ?? 0} 下 · 最佳 ${s.bestSession ?? 0} 下 · ${s.wins ?? 0}勝${s.losses ?? 0}敗`;
+  }
+}
+onAuthChange(renderAccount);
+
+$('signIn').addEventListener('click', async ()=>{
   audioOn();
-  if(!getStream()) await openCamera(cfg, video, skel);
-  if(!getStream()) return;
-  warned10 = false; calibReturn = 'run';
-  $('cancelSetup').textContent = '取消';
-  beginCalibration();
+  $('signIn').disabled = true;
+  $('signIn').textContent = '登入中…';
+  try{
+    await signIn();
+    /* 首次登入還在用預設暱稱 → 直接請他改，不要讓「匿名選手」上場 */
+    if(usingDefaultName()) openNamePanel();
+  }catch(e){
+    showErr('登入失敗：'+(e.message||e));
+    log('登入失敗：'+(e.message||e).toString().slice(0,110));
+  }finally{
+    $('signIn').disabled = false;
+    $('signIn').textContent = '用 Google 登入';
+  }
+});
+
+$('signOut').addEventListener('click', async ()=>{
+  audioOn();
+  try{ await signOut(); }catch(e){ showErr('登出失敗：'+(e.message||e)); }
+});
+
+/* ============ 暱稱設定 ============ */
+function openNamePanel(){
+  const prof = getProfile();
+  $('nameInput').value = usingDefaultName() ? '' : (prof?.displayName || '');
+  $('nameErr').hidden = true;
+  show('name');
+  setTimeout(()=>$('nameInput').focus(), 60);
+}
+$('editName').addEventListener('click', ()=>{ audioOn(); openNamePanel(); });
+$('nameCancel').addEventListener('click', ()=> show('home'));
+
+async function saveName(){
+  const v = $('nameInput').value;
+  if(!validName(v)){
+    $('nameErr').textContent = `暱稱要 1 到 ${NAME_MAX} 個字`;
+    $('nameErr').hidden = false;
+    return;
+  }
+  $('nameSave').disabled = true;
+  try{
+    await setDisplayName(v);
+    show('home');
+  }catch(e){
+    $('nameErr').textContent = (e.message||e).toString();
+    $('nameErr').hidden = false;
+  }finally{
+    $('nameSave').disabled = false;
+  }
+}
+$('nameSave').addEventListener('click', ()=>{ audioOn(); saveName(); });
+$('nameInput').addEventListener('keydown', e=>{ if(e.key==='Enter') saveName(); });
+
+/* ============ 導覽 ============ */
+$('start').addEventListener('click', ()=>{
+  audioOn();
+  requireConsent(async ()=>{
+    if(!getStream()) await openCamera(cfg, video, skel);
+    /* 相機開不起來就回首頁，不要把人留在同意頁動彈不得
+       （錯誤原因由 openCamera 顯示在紅色橫幅） */
+    if(!getStream()){ show('home'); return; }
+    warned10 = false; calibReturn = 'run';
+    $('cancelSetup').textContent = '取消';
+    beginCalibration();
+  });
 });
 $('cancelSetup').addEventListener('click',()=>{
   if(S.phase==='idle'){ beginCalibration(); return; }   // 「重新校正」
@@ -339,5 +439,13 @@ setInterval(()=>{
 /* ============ 啟動 ============ */
 log('UA '+navigator.userAgent.slice(0,90));
 log('secureContext='+window.isSecureContext+'  origin='+location.origin);
+
+/* Firebase 是附加功能，不阻擋計數器啟動。
+   載不起來就維持單機模式（帳號那塊會自己隱藏）。 */
+initFirebase().then(ok=>{
+  if(ok) watchAuth();
+  renderAccount(null, null);
+});
+
 openCamera(cfg, video, skel);
 loop();

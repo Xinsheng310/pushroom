@@ -67,6 +67,31 @@ body{
 .note{color:var(--dim);font-size:11px;line-height:1.6;margin-top:12px}
 .note b{color:var(--cool);font-weight:500}
 
+/* ---------- account row (home) ---------- */
+.acct{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.acctrow{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.acctrow small{color:var(--dim);font-size:11px;line-height:1.6;flex:1 1 14ch;min-width:0}
+.acctwho{min-width:0;flex:1 1 auto}
+.acctwho b{display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acctwho small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
+/* 手機觸控目標至少 44px —— 使用者可能手汗、剛做完力竭 */
+.acctrow .mini{min-height:44px}
+
+/* ---------- sheet (name / consent) ---------- */
+#name,#consent{background:radial-gradient(120% 80% at 50% -10%, #1C2733 0%, var(--ink) 60%);
+  justify-content:center}
+.sheet{width:100%;max-width:34ch;margin:0 auto}
+.sheeth{font-size:clamp(30px,10vw,44px);line-height:.92;margin:8px 0 14px}
+.input{width:100%;margin-top:18px;padding:16px 14px;background:var(--ink2);
+  border:1px solid var(--line);border-radius:2px;color:var(--fg);font-size:18px}
+.input:focus{outline:none;border-color:var(--cool)}
+.nameerr{margin-top:10px;color:var(--signal);font-size:12px;line-height:1.6}
+.bullets{list-style:none;margin:18px 0 0;padding:0}
+.bullets li{position:relative;padding:0 0 14px 16px;color:var(--dim);font-size:13px;line-height:1.75}
+.bullets li::before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;
+  border-radius:99px;background:var(--signal)}
+.bullets b{color:var(--fg);font-weight:500}
+
 /* ---------- setup / calibration ---------- */
 #setup{justify-content:flex-end;text-align:center}
 #setupBody{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:18px}

@@ -27,6 +27,24 @@
         <span class="mono">V0.1</span>
       </div>
       <p class="tag">手機放地上，鏡頭對著你。每做完一下會有聲音回饋，時間到自動結算。</p>
+
+      <!-- 帳號列：未登入顯示登入鈕，已登入顯示暱稱與統計 -->
+      <div id="account" class="acct" hidden>
+        <div id="acctOut" class="acctrow">
+          <button class="ghost mini" id="signIn">用 Google 登入</button>
+          <small>登入才能記戰績、跟朋友對戰。不登入也能練。</small>
+        </div>
+        <div id="acctIn" class="acctrow" hidden>
+          <div class="acctwho">
+            <b id="acctName" class="mono">—</b>
+            <small id="acctStats">—</small>
+          </div>
+          <div class="row">
+            <button class="ghost mini" id="editName">改暱稱</button>
+            <button class="ghost mini" id="signOut">登出</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div>
@@ -56,6 +74,36 @@
       <button class="cta" id="start" disabled>載入模型中…</button>
       <button class="ghost" id="labBtn" style="width:100%;margin-top:8px;padding:16px">測試模式</button>
       <p class="note" id="homeNote">需要相機權限。按下開始後會做 <b>兩次校正</b>：先撐直手臂，再下到最低點，之後才開始計時。</p>
+    </div>
+  </section>
+
+  <!-- NAME — 暱稱設定 -->
+  <section id="name" class="panel">
+    <div class="sheet">
+      <div class="step mono">暱稱</div>
+      <h2 class="display sheeth">對手會看到<br>這個名字</h2>
+      <p class="sub" style="max-width:none">不要用真名。這個名字會顯示在對手的畫面上。</p>
+      <input id="nameInput" class="input mono" type="text" maxlength="20"
+             autocomplete="off" autocapitalize="off" spellcheck="false"
+             placeholder="輸入暱稱">
+      <div id="nameErr" class="nameerr" hidden></div>
+      <div class="row" style="margin-top:18px">
+        <button class="ghost" id="nameCancel" style="flex:0 0 auto;padding:16px 20px">取消</button>
+        <button class="cta" id="nameSave" style="flex:1;font-size:18px;padding:16px">存起來</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONSENT — 首次使用提醒 -->
+  <section id="consent" class="panel">
+    <div class="sheet">
+      <div class="step mono">開始之前</div>
+      <h2 class="display sheeth">兩件事<br>先講清楚</h2>
+      <ul class="bullets">
+        <li><b>影像不會離開你的手機。</b>姿勢偵測完全在裝置本機運算，畫面不上傳、不儲存、不經過任何伺服器。</li>
+        <li><b>運動有風險。</b>有心血管疾病、關節傷病、懷孕或其他身體狀況，請先諮詢醫師。過程中感到胸悶、頭暈、關節疼痛請立即停止。</li>
+      </ul>
+      <button class="cta" id="consentOk" style="width:100%;margin-top:20px;font-size:20px">我知道了</button>
     </div>
   </section>
 

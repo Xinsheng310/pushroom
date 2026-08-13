@@ -7,6 +7,7 @@ export const $ = id => document.getElementById(id);
 
 export const panels = {
   home:$('home'), setup:$('setup'), run:$('run'), result:$('result'), lab:$('lab'),
+  name:$('name'), consent:$('consent'),
 };
 
 export const show = name =>
