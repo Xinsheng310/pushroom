@@ -94,6 +94,15 @@
           <button class="chip" data-sec="120">2:00</button>
         </div>
       </div>
+      <div class="field" style="margin-top:18px">
+        <label>算一下的標準</label>
+        <div class="chips" id="vsModes">
+          <button class="chip" data-mode="standard" aria-checked="true">標準</button>
+          <button class="chip" data-mode="loose">寬鬆</button>
+          <button class="chip" data-mode="custom">自訂</button>
+        </div>
+        <p class="note" id="modeHint" style="margin-top:8px">要下到接近最低點才算一下</p>
+      </div>
       <button class="cta" id="createRoom" style="width:100%;margin-top:14px">開一間</button>
 
       <div class="orsep"><span>或</span></div>
@@ -136,9 +145,25 @@
         </div>
       </div>
 
+      <!-- 本場的判定標準 + 自己的校正狀態 -->
+      <div class="modebar">
+        <div>
+          <span class="mono" id="wModeName">標準</span>
+          <small id="wModeHint">要下到接近最低點才算一下</small>
+        </div>
+        <button class="ghost mini" id="wModeChange" hidden>更改</button>
+      </div>
+      <div class="calibbar">
+        <div>
+          <span class="mono" id="wCalibState">尚未校正</span>
+          <small id="wCalibHint">校正後才能自動計數</small>
+        </div>
+        <button class="ghost mini" id="wCalibBtn">校正</button>
+      </div>
+
       <!-- 訪客用：告訴房主我準備好了 -->
-      <button class="cta" id="readyBtn" style="width:100%;margin-top:22px" hidden>我準備好了</button>
-      <button class="cta" id="goMatch" style="width:100%;margin-top:22px" disabled>等對手加入</button>
+      <button class="cta" id="readyBtn" style="width:100%;margin-top:18px" hidden>我準備好了</button>
+      <button class="cta" id="goMatch" style="width:100%;margin-top:18px" disabled>等對手加入</button>
       <button class="ghost" id="waitLeave" style="width:100%;margin-top:8px;padding:15px">離開房間</button>
       <p class="note" id="waitNote"></p>
     </div>

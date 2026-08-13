@@ -57,6 +57,7 @@ const WRITES = [
   { path:['rooms','$','state'],               who:'開始',   fn:'startMatch' },
   { path:['rooms','$','startAt'],             who:'開始',   fn:'startMatch' },
   { path:['rooms','$','countdownSec'],        who:'開始',   fn:'startMatch' },
+  { path:['rooms','$','calibMode'],           who:'建房',   fn:'setCalibMode' },
   { path:['rooms','$','result'],              who:'結算',   fn:'writeResult' },
   { path:['rooms','$','result','hostReps'],   who:'結算',   fn:'writeResult' },
   { path:['rooms','$','result','guestReps'],  who:'結算',   fn:'writeResult' },

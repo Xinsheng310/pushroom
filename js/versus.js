@@ -12,9 +12,10 @@ import { $, show, fmt } from './ui.js';
 import { sfx, audioOn } from './audio.js';
 import {
   createRoom, joinRoom, leaveRoom, onRoomChange, startMatch, setState, setReady,
-  pushReps, writeResult, opponentGrace, getCode, getRole, isHost, inRoom,
+  setCalibMode, pushReps, writeResult, opponentGrace, getCode, getRole, isHost, inRoom,
   installVisibilityHandler, HOST,
 } from './room.js';
+import { MODES, DEFAULT_MODE, modeLabel, modeHint, thresholdsFor } from './calibmode.js';
 import { normalizeCode, isValidCode, codeFromUrl } from './roomcode.js';
 import { alignedTimer, msUntil } from './clock.js';
 import { shareCode, lineUrl, canNativeShare } from './share.js';
@@ -62,6 +63,9 @@ export function openLobby(){
 }
 
 let lobbyDuration = 60;
+let lobbyMode = DEFAULT_MODE;
+/** 本場的判定標準，由房主寫入 RTDB，雙方讀同一個值 */
+let currentMode = DEFAULT_MODE;
 /** 訪客的準備狀態（本機記錄，實際值以 RTDB 為準） */
 let myReady = false;
 
@@ -72,13 +76,35 @@ export function initLobbyUI(){
     lobbyDuration = +b.dataset.sec;
   });
 
+  $('vsModes').addEventListener('click', e=>{
+    const b = e.target.closest('.chip'); if(!b) return;
+    [...$('vsModes').children].forEach(c=>c.setAttribute('aria-checked', c===b));
+    lobbyMode = b.dataset.mode;
+    $('modeHint').textContent = modeHint(lobbyMode);
+  });
+
+  /* 房主在等待室改模式 → 回大廳選（房間已建立，改完直接寫回 RTDB） */
+  $('wModeChange').addEventListener('click', async ()=>{
+    audioOn();
+    const order = Object.keys(MODES);
+    const next = order[(order.indexOf(currentMode)+1) % order.length];
+    try{ await setCalibMode(next); }
+    catch(e){ showErr('改不了模式：'+(e.message||e)); }
+  });
+
+  /* 等待室內自行校正 —— 雙方都能按，各自校正自己的基準 */
+  $('wCalibBtn').addEventListener('click', ()=>{
+    audioOn();
+    hooks.beginCalibration?.(()=>{});
+  });
+
   $('createRoom').addEventListener('click', async ()=>{
     audioOn();
     const me = meIdentity(); if(!me) return;
     $('createRoom').disabled = true;
     $('createRoom').textContent = '開房中…';
     try{
-      const code = await createRoom(me, lobbyDuration);
+      const code = await createRoom(me, lobbyDuration, lobbyMode);
       vs.durationSec = lobbyDuration;
       show('wait');
       log('房號 '+code);
@@ -223,10 +249,13 @@ let lastState = null;
 function render(v){
   if(!v){
     /* 房間消失（房主離開） */
+    lastView = null;
     if(vs.active){ endVersus(); showErr('房主離開了，房間關閉'); }
     if(inRoom()===false && ['wait','vsresult'].includes(currentPanel())) show('home');
     return;
   }
+
+  lastView = v;
 
   /* --- 等待室 --- */
   $('waitRole').textContent = v.isHost ? '房主' : '訪客';
@@ -254,16 +283,32 @@ function render(v){
       : (op.ready ? '已準備' : '還沒準備');
   }
 
+  /* --- 本場判定標準（雙方一致） --- */
+  currentMode = v.calibMode || DEFAULT_MODE;
+  $('wModeName').textContent = modeLabel(currentMode) + (v.isHost ? '' : '（房主設定）');
+  $('wModeHint').textContent = modeHint(currentMode);
+  $('wModeChange').hidden = !v.isHost;
+
+  /* --- 我自己的校正狀態 --- */
+  const calibrated = !!hooks.hasCalibration?.();
+  $('wCalibState').textContent = calibrated ? '已校正' : '尚未校正';
+  $('wCalibState').classList.toggle('ok', calibrated);
+  $('wCalibHint').textContent = calibrated
+    ? '可以自動計數了'
+    : '沒校正也能玩，但要手動按計數';
+  $('wCalibBtn').textContent = calibrated ? '重新校正' : '校正';
+
   if(v.isHost){
     /* 只有房主能開始（規格第 6.3 節：這同時擋掉亂猜房號的人）。
-       對手在線就能開始 —— 「已準備」是給房主的參考，不是硬性門檻，
-       否則訪客忘了按或按鈕壞掉時整場就開不了。 */
+       對手必須按下準備才能開始 —— 避免手機還在口袋裡就被開賽。 */
     $('readyBtn').hidden = true;
     $('goMatch').hidden = false;
-    const canStart = !!op && op.online;
+    const canStart = !!op && op.online && !!op.ready;
     $('goMatch').disabled = !canStart;
-    $('goMatch').textContent = !canStart ? '等對手加入'
-      : op.ready ? '開始' : '開始（對手還沒按準備）';
+    $('goMatch').textContent = !op ? '等對手加入'
+      : !op.online ? '對手連線中…'
+      : !op.ready ? '等對手按準備'
+      : '開始';
   }else{
     /* 訪客：顯示準備按鈕，不顯示開始鈕 */
     $('goMatch').hidden = true;
@@ -294,6 +339,13 @@ function render(v){
 const currentPanel = ()=>
   [...document.querySelectorAll('.panel')].find(p=>p.classList.contains('on'))?.id;
 
+/** 校正完成後由 main.js 呼叫，讓等待室的「已校正」狀態立刻更新。
+    render 只在 RTDB 有變化時才跑，校正是本機事件不會觸發它。 */
+export function refreshWaitRoom(){
+  if(lastView) render(lastView);
+}
+let lastView = null;
+
 /* ============ 同步倒數 → 對戰 ============ */
 async function onCounting(v){
   /* startAt 是「按下開始」的伺服器時刻，加上倒數長度才是真正起跑時間。
@@ -305,6 +357,14 @@ async function onCounting(v){
   vs.myReps = 0;
   vs.opReps = v.opponent?.reps || 0;
   vs.timer = alignedTimer(startAt);
+
+  /* 套用本場的判定門檻。基準（up/down）各自校正 —— 那是裝置相依的數值，
+     共用會完全錯亂；門檻是比例值，統一才公平。詳見 calibmode.js 的說明。
+     自訂模式回傳 null，代表沿用各自在測試模式調的門檻。 */
+  const th = thresholdsFor(v.calibMode || DEFAULT_MODE);
+  hooks.applyThresholds?.(th);
+  log('本場判定：'+modeLabel(v.calibMode||DEFAULT_MODE)
+      + (th ? ` (下壓 ${th.down} / 回頂 ${th.up})` : '（各自自訂）'));
 
   /* 沒校正過就無法自動計數。倒數期間來不及做校正（要擺兩個姿勢），
      所以直接告訴他可以手動計數 —— 總比整場不能玩好。 */

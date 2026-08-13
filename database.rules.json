@@ -98,6 +98,10 @@
         "countdownSec": {
           ".write": "auth != null && root.child('rooms').child($code).child('host').child('uid').val() == auth.uid",
           ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10"
+        },
+        "calibMode": {
+          ".write": "auth != null && root.child('rooms').child($code).child('host').child('uid').val() == auth.uid",
+          ".validate": "newData.val() == 'standard' || newData.val() == 'loose' || newData.val() == 'custom'"
         }
       }
     }

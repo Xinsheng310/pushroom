@@ -19,7 +19,7 @@ import {
 } from './auth.js';
 import {
   initLobbyUI, openLobby, installVersusHooks, isVersusActive,
-  autoJoinFromUrl, flushPendingJoin,
+  autoJoinFromUrl, flushPendingJoin, refreshWaitRoom,
 } from './versus.js';
 
 installGlobalHandlers();
@@ -72,6 +72,9 @@ let calib = {step:0, t0:0, samples:{}, seenAt:0, holding:false};
 let calibReturn = 'run';
 /* 對戰校正完成後要回呼給 versus.js（宣告在這裡，避免 TDZ） */
 let vsCalibDone = null;
+/* 使用者自己在測試模式調的門檻。對戰會暫時套用統一門檻，結束後還原，
+   否則單機練習會莫名沿用上一場對戰的標準。 */
+const myTh = { ...TH };
 
 function beginCalibration(){
   S.phase = 'calib';
@@ -133,9 +136,11 @@ function applyCalib(best){
     return;
   }
   if(calibReturn==='versus'){
-    /* 對戰：校正完回等待室，由 versus.js 接手寫 startAt */
+    /* 對戰：校正完回等待室。校正是本機事件，要主動叫等待室重畫，
+       否則「已校正」狀態不會更新。 */
     S.phase = 'idle';
     show('wait');
+    refreshWaitRoom();
     const done = vsCalibDone; vsCalibDone = null;
     done?.();
     return;
@@ -161,6 +166,8 @@ function startCountdown(){
 }
 
 function beginRun(){
+  /* 還原自己的門檻 —— 上一場對戰可能把它改成標準/寬鬆 */
+  TH.down = myTh.down; TH.up = myTh.up;
   S.phase = 'run';
   resetCounter();
   S.startAt = performance.now();
@@ -370,6 +377,7 @@ $('labReset').addEventListener('click',()=>{
 
 const bindTh = (id,lbl,key) => $(id).addEventListener('input', e=>{
   TH[key] = +e.target.value;
+  myTh[key] = TH[key];          // 記住使用者的偏好，供對戰「自訂」模式使用
   $(lbl).textContent = TH[key].toFixed(2);
   if(key==='down') $('markDown').style.bottom = (TH.down*100)+'%';
 });
@@ -518,11 +526,20 @@ setInterval(()=>{
 /* ============ 對戰接線 ============ */
 installVersusHooks({
   hasCalibration: ()=> !!S.key,
-  /* 對戰前先校正一次。校正完成後呼叫 done，讓房主接著寫 startAt。 */
+  /* 等待室內自行校正。完成後回等待室（done 供房主流程用）。 */
   beginCalibration: (done)=>{
     vsCalibDone = done;
     calibReturn = 'versus';
     beginCalibration();
+  },
+  /**
+   * 套用本場門檻。null = 自訂模式，沿用本機設定。
+   * 只改門檻不改基準 —— 基準是裝置相依的，各自校正。
+   */
+  applyThresholds: (th)=>{
+    if(th){ TH.down = th.down; TH.up = th.up; }
+    else   { TH.down = myTh.down; TH.up = myTh.up; }
+    $('markDown').style.bottom = (TH.down*100)+'%';
   },
   beginVsRun,
   abortRun: abortVsRun,

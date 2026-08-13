@@ -73,6 +73,7 @@ function view(){
     state: d.state || 'waiting',
     startAt: d.startAt || 0,
     countdownSec: d.countdownSec ?? 3,
+    calibMode: d.calibMode ?? 'standard',
     durationSec: d.config?.durationSec ?? 60,
     result: d.result || null,
     me: meRaw,
@@ -92,7 +93,7 @@ function view(){
  * @param {number} durationSec
  * @returns {Promise<string>} 房號
  */
-export async function createRoom(me, durationSec){
+export async function createRoom(me, durationSec, calibMode='standard'){
   requireReady();
   const { db: D } = getSdk();
   const rtdb = getRtdb();
@@ -112,6 +113,7 @@ export async function createRoom(me, durationSec){
       createdAt: D.serverTimestamp(),
     });
     await D.set(D.ref(rtdb,`rooms/${code}/host`), sideData(me));
+    await D.set(D.ref(rtdb,`rooms/${code}/calibMode`), calibMode);
     await D.set(D.ref(rtdb,`rooms/${code}/state`), 'waiting');
 
     await attach(code, HOST);
@@ -239,6 +241,14 @@ export async function setReady(ready){
   if(!state.code) return;
   const { db: D } = getSdk();
   await D.set(D.ref(getRtdb(), `rooms/${state.code}/${state.role}/ready`), !!ready);
+}
+
+/** 房主設定本場的校正模式。雙方套用同一組門檻 → 公平性。 */
+export async function setCalibMode(mode){
+  if(state.role !== HOST || !state.code) return;
+  const { db: D } = getSdk();
+  await D.set(D.ref(getRtdb(), `rooms/${state.code}/calibMode`), mode);
+  log('校正模式設為 '+mode);
 }
 
 /* ============ 房主：開始比賽 ============ */
