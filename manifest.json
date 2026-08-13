@@ -1,0 +1,20 @@
+{
+  "name": "REP ROOM — 伏地挺身計數器",
+  "short_name": "REP ROOM",
+  "description": "用手機鏡頭數伏地挺身，跟朋友開房間即時對戰。影像完全在裝置本機處理。",
+  "lang": "zh-Hant",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0F14",
+  "theme_color": "#0B0F14",
+  "categories": ["health", "fitness", "sports"],
+  "icons": [
+    { "src": "icons/icon-192.png",     "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png",     "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

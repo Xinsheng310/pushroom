@@ -754,5 +754,32 @@ onAuthChange(user=>{
 /* 帶入上次的校正 —— 校正要擺兩個姿勢等 8 秒，能省就省 */
 restoreCalib();
 
+/* Service Worker：只快取靜態資源，讓「加入主畫面」後開得快。
+   註冊失敗不影響任何功能（例如非 https、或使用者停用）。
+   注意 iOS 上 PWA 首次開啟需重新授權相機（規格第 9 節）。 */
+if('serviceWorker' in navigator && window.isSecureContext){
+  const registerSW = ()=>{
+    navigator.serviceWorker.register('sw.js')
+      .then(reg=>{
+        log('Service Worker 已註冊');
+        /* 有新版時提示，不要讓使用者卡在舊版程式 */
+        reg.addEventListener('updatefound', ()=>{
+          const nw = reg.installing;
+          nw?.addEventListener('statechange', ()=>{
+            if(nw.state==='installed' && navigator.serviceWorker.controller){
+              log('偵測到新版，重新整理即生效');
+            }
+          });
+        });
+      })
+      .catch(e=> log('Service Worker 註冊失敗：'+(e.message||e).toString().slice(0,60)));
+  };
+  /* ES module 是 defer 執行，很可能在 load 之後才跑到這裡 ——
+     那時 load 事件早就發生過，掛 listener 永遠不會被呼叫。
+     所以要先判斷目前狀態。 */
+  if(document.readyState === 'complete') registerSW();
+  else addEventListener('load', registerSW);
+}
+
 openCamera(cfg, video, skel);
 loop();
