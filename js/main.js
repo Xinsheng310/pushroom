@@ -17,6 +17,10 @@ import {
   watchAuth, onAuthChange, signIn, signOut, setDisplayName,
   validName, usingDefaultName, addSession, getProfile, NAME_MAX,
 } from './auth.js';
+import {
+  initLobbyUI, openLobby, installVersusHooks, isVersusActive,
+  autoJoinFromUrl, flushPendingJoin,
+} from './versus.js';
 
 installGlobalHandlers();
 
@@ -66,6 +70,8 @@ function loop(){
 /* ============ 校正 ============ */
 let calib = {step:0, t0:0, samples:{}, seenAt:0, holding:false};
 let calibReturn = 'run';
+/* 對戰校正完成後要回呼給 versus.js（宣告在這裡，避免 TDZ） */
+let vsCalibDone = null;
 
 function beginCalibration(){
   S.phase = 'calib';
@@ -126,6 +132,14 @@ function applyCalib(best){
     show('lab');
     return;
   }
+  if(calibReturn==='versus'){
+    /* 對戰：校正完回等待室，由 versus.js 接手寫 startAt */
+    S.phase = 'idle';
+    show('wait');
+    const done = vsCalibDone; vsCalibDone = null;
+    done?.();
+    return;
+  }
   startCountdown();
 }
 
@@ -159,11 +173,63 @@ function beginRun(){
   requestWakeLock();
 }
 
+/* ============ 對戰模式 ============
+   與單機 run 共用 track()，計數行為必然一致；
+   差別只在計時來源（伺服器對齊的 timer）與每下要回報給對手。 */
+const vsRun = { timer:null, durationSec:60, onRep:null, onEnd:null, warned:false };
+
+function beginVsRun(timer, durationSec, onRep, onEnd){
+  vsRun.timer = timer;
+  vsRun.durationSec = durationSec;
+  vsRun.onRep = onRep;
+  vsRun.onEnd = onEnd;
+  vsRun.warned = false;
+  S.phase = 'vsrun';
+  resetCounter();
+  S.startAt = performance.now();
+  $('count').textContent = '0';
+  clearTicks();
+  $('clock').classList.remove('warn');
+  $('markDown').style.bottom = (TH.down*100)+'%';
+  $('status').textContent = '下到底 → 撐起來';
+  show('run');
+  requestWakeLock();
+}
+
+function abortVsRun(){
+  if(S.phase==='vsrun'){ S.phase='idle'; releaseWakeLock(); }
+}
+
 /* ============ 每幀 ============ */
 let warned10 = false;
 function onFrame(lm, ts){
   fpsTick(ts);
   if(isLabOpen()) labUpdate(lm, ts);
+
+  /* ---- 對戰中 ---- */
+  if(S.phase==='vsrun'){
+    const left = vsRun.timer.remainingTo(vsRun.durationSec*1000);
+    $('clock').textContent = fmt(Math.max(0,left));
+    if(left<=10000){
+      $('clock').classList.add('warn');
+      if(!vsRun.warned){ vsRun.warned = true; sfx.warn(); }
+    }
+    if(left<=0){
+      S.phase = 'done'; releaseWakeLock();
+      vsRun.onEnd?.(S.reps);
+      return;
+    }
+    const r = track(lm, ts);
+    if(r===null){ $('status').textContent='看不到你 — 調整位置'; return; }
+    $('gaugeFill').style.height = Math.min(100, S.depth*100)+'%';
+    if(r==='down') $('status').textContent = '撐起來';
+    if(r==='rep'){
+      $('count').textContent = S.reps; pulse(); addTick(S.times);
+      $('status').textContent = '';
+      vsRun.onRep?.(S.reps);
+    }
+    return;
+  }
 
   /* ---- 測試模式的自由計數 ---- */
   if(S.phase==='lab'){
@@ -347,6 +413,8 @@ function renderAccount(user, prof){
   const signedIn = !!user;
   $('acctOut').hidden = signedIn;
   $('acctIn').hidden  = !signedIn;
+  /* 對戰需要登入（房間要記誰是誰），沒登入就不顯示按鈕 */
+  $('versusBtn').hidden = !(isReady() && signedIn);
   if(signedIn && prof){
     $('acctName').textContent = prof.displayName;
     const s = prof.stats || {};
@@ -424,8 +492,17 @@ $('start').addEventListener('click', ()=>{
   });
 });
 $('cancelSetup').addEventListener('click',()=>{
-  if(S.phase==='idle'){ beginCalibration(); return; }   // 「重新校正」
+  if(S.phase==='idle' && calibReturn!=='versus'){ beginCalibration(); return; }  // 「重新校正」
   S.phase = 'idle'; clearInterval(cdTimer);
+  if(calibReturn==='versus'){
+    /* 取消對戰校正 → 回等待室，並丟掉未完成的回呼，
+       否則房主會卡在「先做一次校正…」永遠等不到 */
+    vsCalibDone = null;
+    $('goMatch').disabled = false;
+    $('waitNote').textContent = '';
+    show('wait');
+    return;
+  }
   show(calibReturn==='lab'?'lab':'home');
 });
 $('abort').addEventListener('click',()=>{ if(S.phase==='run') finish(); });
@@ -436,6 +513,43 @@ setInterval(()=>{
   if(isLabOpen() && !getLandmarker()) renderChecks(buildChecks());
 }, 1000);
 
+/* ============ 對戰接線 ============ */
+installVersusHooks({
+  hasCalibration: ()=> !!S.key,
+  /* 對戰前先校正一次。校正完成後呼叫 done，讓房主接著寫 startAt。 */
+  beginCalibration: (done)=>{
+    vsCalibDone = done;
+    calibReturn = 'versus';
+    beginCalibration();
+  },
+  beginVsRun,
+  abortRun: abortVsRun,
+});
+
+$('versusBtn').addEventListener('click', ()=>{
+  audioOn();
+  requireConsent(async ()=>{
+    if(!getStream()) await openCamera(cfg, video, skel);
+    openLobby();
+  });
+});
+
+/* 手動計數 —— 給沒有相機、或用電腦當房主測試的情況。
+   對戰中按空白鍵 / 點畫面中央即 +1，走的是同一條回報路徑。 */
+function manualRep(){
+  if(S.phase!=='vsrun') return;
+  S.reps++; S.times.push(performance.now()-S.startAt);
+  sfx.rep(S.reps);
+  $('count').textContent = S.reps;
+  pulse(); addTick(S.times);
+  vsRun.onRep?.(S.reps);
+  log('手動計數 '+S.reps);
+}
+addEventListener('keydown', e=>{
+  if(e.code==='Space' && S.phase==='vsrun'){ e.preventDefault(); manualRep(); }
+});
+$('count').addEventListener('click', manualRep);
+
 /* ============ 啟動 ============ */
 log('UA '+navigator.userAgent.slice(0,90));
 log('secureContext='+window.isSecureContext+'  origin='+location.origin);
@@ -443,8 +557,22 @@ log('secureContext='+window.isSecureContext+'  origin='+location.origin);
 /* Firebase 是附加功能，不阻擋計數器啟動。
    載不起來就維持單機模式（帳號那塊會自己隱藏）。 */
 initFirebase().then(ok=>{
-  if(ok) watchAuth();
+  if(ok){
+    watchAuth();
+    initLobbyUI();
+    /* 朋友傳來的 ?room=XXXX：已登入就直接進房，
+       未登入則記下來，登入完成後由下面的 onAuthChange 補上。 */
+    autoJoinFromUrl();
+  }
   renderAccount(null, null);
+});
+
+let joinedFromUrl = false;
+onAuthChange(user=>{
+  if(user && !joinedFromUrl){
+    joinedFromUrl = true;
+    flushPendingJoin();
+  }
 });
 
 openCamera(cfg, video, skel);

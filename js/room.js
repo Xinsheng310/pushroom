@@ -72,6 +72,7 @@ function view(){
     isHost: state.role===HOST,
     state: d.state || 'waiting',
     startAt: d.startAt || 0,
+    countdownSec: d.countdownSec ?? 3,
     durationSec: d.config?.durationSec ?? 60,
     result: d.result || null,
     me: meRaw,

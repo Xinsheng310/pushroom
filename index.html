@@ -72,8 +72,88 @@
 
     <div>
       <button class="cta" id="start" disabled>載入模型中…</button>
-      <button class="ghost" id="labBtn" style="width:100%;margin-top:8px;padding:16px">測試模式</button>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="versusBtn" style="flex:1;padding:16px" hidden>跟朋友對戰</button>
+        <button class="ghost" id="labBtn" style="flex:1;padding:16px">測試模式</button>
+      </div>
       <p class="note" id="homeNote">需要相機權限。按下開始後會做 <b>兩次校正</b>：先撐直手臂，再下到最低點，之後才開始計時。</p>
+    </div>
+  </section>
+
+  <!-- LOBBY — 建房 / 加入 -->
+  <section id="lobby" class="panel">
+    <div class="sheet">
+      <div class="step mono">對戰</div>
+      <h2 class="display sheeth">開房間<br>或加入</h2>
+
+      <div class="field" style="margin-top:22px">
+        <label>時間</label>
+        <div class="chips" id="vsDurations">
+          <button class="chip" data-sec="30">0:30</button>
+          <button class="chip" data-sec="60" aria-checked="true">1:00</button>
+          <button class="chip" data-sec="120">2:00</button>
+        </div>
+      </div>
+      <button class="cta" id="createRoom" style="width:100%;margin-top:14px">開一間</button>
+
+      <div class="orsep"><span>或</span></div>
+
+      <label class="lbl">輸入朋友給的房號</label>
+      <div class="row">
+        <input id="codeInput" class="input mono codein" type="text" maxlength="5"
+               inputmode="latin" autocomplete="off" autocapitalize="characters"
+               spellcheck="false" placeholder="ABCD" style="margin-top:0">
+        <button class="ghost" id="joinRoom" style="flex:0 0 auto;padding:16px 22px">加入</button>
+      </div>
+      <div id="lobbyErr" class="nameerr" hidden></div>
+
+      <button class="ghost" id="lobbyBack" style="width:100%;margin-top:20px;padding:15px">回首頁</button>
+    </div>
+  </section>
+
+  <!-- WAIT — 等待對手 / 房間內 -->
+  <section id="wait" class="panel">
+    <div class="sheet">
+      <div class="step mono" id="waitRole">房主</div>
+      <div class="codebig display" id="codeBig">————</div>
+      <p class="sub" style="max-width:none" id="waitHint">把房號給朋友，他輸入後就會出現在下面。</p>
+
+      <div class="row" style="margin-top:6px">
+        <button class="ghost" id="shareBtn" style="flex:1;padding:15px">分享房號</button>
+        <button class="ghost" id="lineBtn" style="flex:0 0 auto;padding:15px 18px">LINE</button>
+      </div>
+      <div id="shareMsg" class="sharemsg" hidden></div>
+
+      <div class="vsrow">
+        <div class="vsside">
+          <b id="wMeName" class="mono">—</b>
+          <small>你</small>
+        </div>
+        <div class="vsdot mono">VS</div>
+        <div class="vsside right">
+          <b id="wOpName" class="mono">等待中…</b>
+          <small id="wOpState">尚未加入</small>
+        </div>
+      </div>
+
+      <button class="cta" id="goMatch" style="width:100%;margin-top:22px" disabled>等對手加入</button>
+      <button class="ghost" id="waitLeave" style="width:100%;margin-top:8px;padding:15px">離開房間</button>
+      <p class="note" id="waitNote"></p>
+    </div>
+  </section>
+
+  <!-- VSRESULT — 對戰結算 -->
+  <section id="vsresult" class="panel">
+    <div class="sheet" style="text-align:center">
+      <div class="step mono" id="vsVerdictCap">結果</div>
+      <div class="display vsverdict" id="vsVerdict">—</div>
+      <div class="vsscore">
+        <div><b class="mono" id="vsMeReps">0</b><small id="vsMeName">你</small></div>
+        <div class="vsscoresep mono">:</div>
+        <div><b class="mono" id="vsOpReps">0</b><small id="vsOpName">對手</small></div>
+      </div>
+      <button class="cta" id="vsAgain" style="width:100%;margin-top:26px">再來一場</button>
+      <button class="ghost" id="vsHome" style="width:100%;margin-top:8px;padding:15px">回首頁</button>
     </div>
   </section>
 
@@ -132,6 +212,12 @@
       </div>
     </div>
     <div id="count">0</div>
+    <!-- 對戰中唯一該強化的是對手的即時數字（規格第 7 節） -->
+    <div id="vsLive" hidden>
+      <div class="vslivename mono" id="vsLiveName">對手</div>
+      <div class="vslivereps display" id="vsLiveReps">0</div>
+      <div class="vslivegap mono" id="vsLiveGap">—</div>
+    </div>
     <div id="gauge"><div id="gaugeFill"></div><div class="mark" id="markDown"></div></div>
     <div id="cadence"></div>
     <div id="status">下到底 → 撐起來，一下算一次</div>
