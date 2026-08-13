@@ -25,7 +25,9 @@ python -m http.server 8000
 
 ## 迴歸測試
 
-用合成 landmark 序列驗證偵測演算法，不需相機也不需瀏覽器：
+### 偵測演算法
+
+用合成 landmark 序列驗證，不需相機也不需瀏覽器：
 
 ```bash
 node tests/detect.test.mjs
@@ -33,6 +35,27 @@ node tests/detect.test.mjs
 
 測試內含一份原始單檔版演算法作為對照組，比對校正分數、rep 數、depth 逐幀軌跡是否完全一致。
 **動到 `js/detect.js` 後務必跑這個** —— 它就是用來擋住「不小心改壞演算法」的。
+
+### 安全規則（靜態檢查）
+
+不需 Java、不需 emulator，檢查規則檔結構與每條約束是否都在：
+
+```bash
+node tests/rules.test.mjs
+```
+
+### 安全規則（行為驗證）
+
+真的去試著攻擊規則。需要先安裝 Java 與 firebase-tools：
+
+```bash
+npm install -g firebase-tools
+npm install --no-save @firebase/rules-unit-testing firebase
+firebase emulators:exec --only firestore,database "node tests/rules.emulator.test.mjs"
+```
+
+驗證項目包含：他人不可寫我的 reps、不可偽造比賽參與者、不可自己跟自己打刷勝場、
+winner 必須與次數相符、`startAt` 必須是伺服器時間戳、已寫入的戰績不可篡改。
 
 ## 專案結構
 
@@ -45,7 +68,10 @@ js/pose.js          相機 + MediaPipe 模型 + 骨架繪製
 js/detect.js        偵測演算法（訊號、校正、計數狀態機）
 js/ui.js            DOM 存取與渲染
 js/main.js          主流程
-tests/detect.test.mjs  偵測演算法迴歸測試
+firestore.rules     Firestore 安全規則
+database.rules.json Realtime Database 安全規則
+firebase.json       規則檔位置與 emulator 設定
+tests/              迴歸測試
 docs/               規格書與原始單檔版
 ```
 

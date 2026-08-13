@@ -1,0 +1,122 @@
+rules_version = '2';
+
+/* REP ROOM — Firestore 安全規則
+
+   repo 是公開的，專案 ID 等於昭告天下。這份規則是資料庫唯一的防線。
+   規格第 5 節：規則優先於功能，先寫好再推 GitHub。
+
+   資料模型見 REPROOM_BUILD_SPEC.md 第 4.2 節。 */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ---------- 共用判斷 ---------- */
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    /* 這次寫入實際改動的欄位集合 */
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    /* ---------- users ----------
+       本人可讀寫。不儲存 email（規格第 4.2 節）。
+       顯示名稱由使用者自訂，不沿用 Google 帳號真實姓名。 */
+
+    function validStats(s) {
+      return s.keys().hasOnly(['totalReps','bestSession','wins','losses','draws','matches'])
+          && s.totalReps    is int && s.totalReps    >= 0
+          && s.bestSession  is int && s.bestSession  >= 0
+          && s.wins         is int && s.wins         >= 0
+          && s.losses       is int && s.losses       >= 0
+          && s.draws        is int && s.draws        >= 0
+          && s.matches      is int && s.matches      >= 0;
+    }
+
+    function validUser(d) {
+      return d.keys().hasOnly(['displayName','photoURL','createdAt','stats'])
+          && d.displayName is string
+          && d.displayName.size() >= 1 && d.displayName.size() <= 20
+          /* 不收 email：明確擋掉，避免哪天客戶端手滑寫進來 */
+          && !d.keys().hasAny(['email'])
+          && validStats(d.stats);
+    }
+
+    match /users/{uid} {
+      /* 對戰時需要看到對手的暱稱，所以已登入者可讀。
+         這裡沒有 email、沒有任何聯絡資訊，只有暱稱、頭像與統計。 */
+      allow read: if signedIn();
+
+      allow create: if isSelf(uid) && validUser(request.resource.data);
+
+      /* stats 只能由本人寫入（規格第 5 節）。
+         此處 update 也限定本人，等同 stats 與 displayName 都只有自己能改。 */
+      allow update: if isSelf(uid) && validUser(request.resource.data);
+
+      /* 不給刪。要「刪帳號」是另一件事，不該由客戶端一句 delete 完成。 */
+      allow delete: if false;
+    }
+
+    /* ---------- matches ----------
+       僅該場兩位參與者可建立，且 players 必須包含自己。
+       建立後不可修改或刪除（規格第 5 節）。
+
+       matchId 由兩人 uid 排序後組合 + 時間戳，同一場只會有一筆；
+       規則層的 create-only 讓「同一 matchId 建立兩次」自動失敗，
+       所以房主與訪客都可以嘗試寫入，誰先到算誰的，資料不會重複。
+       這樣房主在結算瞬間斷線時，訪客還能把紀錄補上。 */
+
+    function validSide(p) {
+      return p.keys().hasOnly(['uid','name','reps'])
+          && p.uid  is string && p.uid.size() > 0
+          && p.name is string && p.name.size() <= 20
+          && p.reps is int && p.reps >= 0 && p.reps <= 10000;
+    }
+
+    function validMatch(d) {
+      return d.keys().hasOnly(['players','a','b','durationSec','winner','playedAt'])
+          && d.players is list
+          && d.players.size() == 2
+          && d.players[0] != d.players[1]
+          /* players 供 array-contains 查詢，必須與 a/b 的 uid 一致，
+             否則可以偽造「我參與過某場」來把別人的比賽掛到自己名下 */
+          && d.players.hasOnly([d.a.uid, d.b.uid])
+          && d.players.hasAll([d.a.uid, d.b.uid])
+          && validSide(d.a)
+          && validSide(d.b)
+          && d.durationSec is int && d.durationSec > 0 && d.durationSec <= 3600
+          && d.winner in ['a','b','draw']
+          /* 勝負必須與雙方次數相符，不能自己填一個爽的 */
+          && (d.winner == 'a'    ? d.a.reps >  d.b.reps :
+              d.winner == 'b'    ? d.b.reps >  d.a.reps :
+                                   d.a.reps == d.b.reps)
+          && d.playedAt is timestamp;
+    }
+
+    match /matches/{matchId} {
+      /* 只有參與者看得到這場比賽 */
+      allow read: if signedIn()
+                  && request.auth.uid in resource.data.players;
+
+      /* 必須是自己參與的比賽才能建立 */
+      allow create: if signedIn()
+                    && request.auth.uid in request.resource.data.players
+                    && validMatch(request.resource.data);
+
+      /* 戰績寫下去就是定案，不給改也不給刪 */
+      allow update, delete: if false;
+    }
+
+    /* ---------- 其他一切拒絕 ----------
+       沒有明確允許的路徑一律擋掉，包含未來手滑新增的 collection。 */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
