@@ -34,6 +34,34 @@ if(db){
   const r = db.rules;
   const room = r?.rooms?.$code;
 
+  /* RTDB 規則解析器把任何非 "." 開頭的鍵都當成子路徑、必須是物件，
+     所以 "//" 註解鍵會讓部署直接失敗（"Expected '{'"）。
+     這是實際部署時踩到的 —— 原本的靜態檢查只驗 JSON 結構所以沒抓到。 */
+  check('根層只有 rules 屬性', Object.keys(db).length===1 && 'rules' in db,
+        Object.keys(db).join(','));
+  const commentKeys = [];
+  (function scan(o, path){
+    if(!o || typeof o!=='object' || Array.isArray(o)) return;
+    for(const k of Object.keys(o)){
+      if(k.startsWith('//')) commentKeys.push((path?path+'.':'')+k);
+      scan(o[k], (path?path+'.':'')+k);
+    }
+  })(db,'');
+  check('沒有 "//" 註解鍵（RTDB 不接受，會導致部署失敗）',
+        commentKeys.length===0, commentKeys.join(' '));
+
+  /* 每個非 "." 開頭的鍵，其值必須是物件 */
+  const badShape = [];
+  (function shape(o, path){
+    if(!o || typeof o!=='object') return;
+    for(const [k,v] of Object.entries(o)){
+      if(k.startsWith('.')) continue;
+      if(typeof v!=='object' || v===null || Array.isArray(v)) badShape.push((path?path+'.':'')+k);
+      else shape(v, (path?path+'.':'')+k);
+    }
+  })(r,'');
+  check('所有子路徑的值都是物件', badShape.length===0, badShape.join(' '));
+
   check('根層預設拒絕讀寫', r['.read']===false && r['.write']===false);
   check('房間層沒有 .write（避免整個子樹被授權）', room && !('.write' in room),
         room && '.write' in room ? '房間層有 .write，會授權整個子樹' : '');

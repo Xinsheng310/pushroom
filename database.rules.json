@@ -1,35 +1,12 @@
 {
-  "//": [
-    "REP ROOM — Realtime Database 安全規則",
-    "",
-    "資料模型見 REPROOM_BUILD_SPEC.md 第 4.1 節，房間流程見第 6 節。",
-    "核心約束（規格第 5 節）：",
-    "  1. 僅 host / guest 可寫入各自的節點",
-    "  2. 任何人不得寫入他人的 reps",
-    "  3. reps 為非負整數等資料驗證",
-    "",
-    "為什麼用 RTDB 而不是 Firestore：需要 onDisconnect()（規格第 2 節）。",
-    "",
-    "注意 RTDB 規則的兩個特性：",
-    "  - .write 在較上層通過就會授權整個子樹，所以房間層級刻意不給 .write，",
-    "    只在 host/guest/state/startAt/result 等具體節點上分別授權。",
-    "  - newData.val() 為 null 代表刪除。"
-  ],
-
   "rules": {
     ".read": false,
     ".write": false,
-
     "rooms": {
       "$code": {
-        "//": "房號四碼，字元集排除 0 O 1 I L（規格第 6.1 節）",
         ".validate": "$code.matches(/^[A-HJ-KM-NP-Z2-9]{4}$/)",
-
-        "//read": "房間內容需已登入才能讀。亂猜房號的人擋在「房主手動按開始」那一關（規格第 6.3 節）",
         ".read": "auth != null",
-
         "config": {
-          "//": "只有建房的人能寫，寫下去不再改",
           ".write": "auth != null && !data.exists()",
           "durationSec": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3600"
@@ -37,11 +14,11 @@
           "createdAt": {
             ".validate": "newData.val() == now"
           },
-          "$other": { ".validate": false }
+          "$other": {
+            ".validate": false
+          }
         },
-
         "host": {
-          "//": "空位可被佔用；佔用後只有本人能改。離開時可清空。",
           ".write": "auth != null && (!data.exists() || data.child('uid').val() == auth.uid || !newData.exists())",
           ".validate": "newData.hasChildren(['uid','name','online','reps','ready'])",
           "uid": {
@@ -50,15 +27,19 @@
           "name": {
             ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20"
           },
-          "online": { ".validate": "newData.isBoolean()" },
+          "online": {
+            ".validate": "newData.isBoolean()"
+          },
           "reps": {
-            "//": "任何人不得寫入他人的 reps —— 由上層 .write 的 uid 比對保證",
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000 && newData.val() % 1 == 0"
           },
-          "ready": { ".validate": "newData.isBoolean()" },
-          "$other": { ".validate": false }
+          "ready": {
+            ".validate": "newData.isBoolean()"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
-
         "guest": {
           ".write": "auth != null && (!data.exists() || data.child('uid').val() == auth.uid || !newData.exists())",
           ".validate": "newData.hasChildren(['uid','name','online','reps','ready'])",
@@ -68,32 +49,28 @@
           "name": {
             ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20"
           },
-          "online": { ".validate": "newData.isBoolean()" },
+          "online": {
+            ".validate": "newData.isBoolean()"
+          },
           "reps": {
             ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000 && newData.val() % 1 == 0"
           },
-          "ready": { ".validate": "newData.isBoolean()" },
-          "$other": { ".validate": false }
+          "ready": {
+            ".validate": "newData.isBoolean()"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
-
         "state": {
-          "//": "只有房主能推進狀態（規格第 6.3 節：房主看到訪客後手動按開始）",
           ".write": "auth != null && root.child('rooms').child($code).child('host').child('uid').val() == auth.uid",
           ".validate": "newData.val() == 'waiting' || newData.val() == 'counting' || newData.val() == 'live' || newData.val() == 'done'"
         },
-
         "startAt": {
-          "//": [
-            "絕對不可用客戶端計時器互相信任（規格第 6.5 節）。",
-            "只有房主能寫，且必須寫入伺服器時間戳 now —— 規則強制這件事，",
-            "房主無法塞一個對自己有利的假時間。"
-          ],
           ".write": "auth != null && root.child('rooms').child($code).child('host').child('uid').val() == auth.uid",
           ".validate": "newData.val() == now"
         },
-
         "result": {
-          "//": "任一參與者可寫入結算；寫下去不再改",
           ".write": "auth != null && !data.exists() && (root.child('rooms').child($code).child('host').child('uid').val() == auth.uid || root.child('rooms').child($code).child('guest').child('uid').val() == auth.uid)",
           ".validate": "newData.hasChildren(['hostReps','guestReps','winner'])",
           "hostReps": {
@@ -105,10 +82,13 @@
           "winner": {
             ".validate": "newData.val() == 'host' || newData.val() == 'guest' || newData.val() == 'draw'"
           },
-          "$other": { ".validate": false }
+          "$other": {
+            ".validate": false
+          }
         },
-
-        "$other": { ".validate": false }
+        "$other": {
+          ".validate": false
+        }
       }
     }
   }
