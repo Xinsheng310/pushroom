@@ -149,6 +149,13 @@ export async function joinRoom(me, code){
 
   const d = snap.val();
 
+  /* 已結算或雙方都走光的房間不可加入，也不可「接回去」。
+     否則手機關掉畫面再打開時，會被接回一場早就打完的比賽。 */
+  if(roomIsDead(d)){
+    reapIfDead(code).catch(()=>{});
+    throw new Error('這場已經結束了');
+  }
+
   /* 我原本就在這個房間（重新連線的情況）→ 直接接回去 */
   if(d.host?.uid === me.uid){ await attach(code, HOST); await markOnline(); return; }
   if(d.guest?.uid === me.uid){ await attach(code, GUEST); await markOnline(); return; }
@@ -353,13 +360,78 @@ export function opponentGrace(){
 
 /* ============ 頁面進背景 / 回前景 ============
    iOS 會凍結背景分頁，回來時 RTDB 連線可能已斷。
-   規格第 6.4 節說的正是這個情境，所以回前景時要主動標記自己在線。 */
-export function installVisibilityHandler(){
-  document.addEventListener('visibilitychange', ()=>{
-    if(document.visibilityState==='visible' && state.code){
+   規格第 6.4 節說的正是這個情境。
+
+   回前景時要做兩件事，順序很重要：
+     1. 先確認這個房間還活著 —— 手機關掉畫面幾分鐘後回來，
+        那場可能已經打完、或對手早就走了。直接 markOnline 會把自己
+        「復活」到一個已結束的房間裡，這正是使用者回報的問題。
+     2. 房間還有效才標記自己在線。
+
+   @param {(reason:string)=>void} [onDead] 房間已失效時的回呼，讓 UI 帶使用者離開 */
+export function installVisibilityHandler(onDead){
+  document.addEventListener('visibilitychange', async ()=>{
+    if(document.visibilityState!=='visible' || !state.code) return;
+    const code = state.code;
+    try{
+      const { db: D } = getSdk();
+      const snap = await D.get(D.ref(getRtdb(), 'rooms/'+code));
+      if(!snap.exists() || roomIsDead(snap.val())){
+        log('回到前景時發現房間已結束');
+        reapIfDead(code).catch(()=>{});
+        await leaveRoom();
+        onDead?.('這場已經結束了');
+        return;
+      }
+      await markOnline();
+    }catch(e){
+      /* 讀不到就先標記在線，不要因為一次網路失敗把人踢出房間 */
       markOnline().catch(()=>{});
     }
   });
+}
+
+/* ============ 死房間判斷與清理 ============ */
+/**
+ * 房間是否已經沒有意義（結束了、或雙方都走光了）。
+ *
+ * 規格第 6.4 節：兩人皆離線超過寬限期 → 刪除房間節點。
+ * 另外加上「已結算」與「已 done」—— 那種房間留著只會讓人回來被接回一場
+ * 早就打完的比賽。
+ *
+ * 注意「房間只有一人是正常狀態」（規格第 6.4 節）：房主建房等訪客時
+ * guest 是空的，那不算死房間。
+ */
+export function roomIsDead(d){
+  if(!d) return true;
+  if(d.result) return true;              // 已結算，這場結束了
+  if(d.state === 'done') return true;
+  const h = d.host, g = d.guest;
+  if(!h) return true;                    // 房主節點不見了，房間等於沒了
+  /* 房主還在（或還在寬限期內）就不算死 —— 訪客沒來是正常的 */
+  if(!seatExpired(h)) return false;
+  /* 房主超時了。訪客也超時（或不存在）才算整間死掉 */
+  return !g || seatExpired(g);
+}
+
+/**
+ * 清掉已死的房間。任一參與者都能清（規則允許 host 刪整間、guest 刪自己），
+ * 但只有房主刪得掉整個節點，所以訪客只能離開自己的位子。
+ */
+export async function reapIfDead(code){
+  if(!isReady() || !code) return false;
+  const { db: D } = getSdk();
+  try{
+    const snap = await D.get(D.ref(getRtdb(), 'rooms/'+code));
+    if(!snap.exists()) return true;
+    if(!roomIsDead(snap.val())) return false;
+    log('房間 '+code+' 已結束或無人，清理');
+    /* 刪不掉不是問題（規則只讓房主刪整間），呼叫端只需要知道「這房間不能用」 */
+    try{ await D.remove(D.ref(getRtdb(),'rooms/'+code)); }catch(e){}
+    return true;
+  }catch(e){
+    return false;
+  }
 }
 
 /* ============ 小工具 ============ */

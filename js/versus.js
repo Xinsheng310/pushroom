@@ -13,7 +13,7 @@ import { sfx, audioOn } from './audio.js';
 import {
   createRoom, joinRoom, leaveRoom, onRoomChange, startMatch, setState, setReady,
   setCalibMode, pushReps, writeResult, opponentGrace, getCode, getRole, isHost, inRoom,
-  installVisibilityHandler, HOST,
+  installVisibilityHandler, reapIfDead, HOST,
 } from './room.js';
 import { MODES, DEFAULT_MODE, modeLabel, modeHint, thresholdsFor } from './calibmode.js';
 import { normalizeCode, isValidCode, codeFromUrl } from './roomcode.js';
@@ -170,12 +170,28 @@ export function initLobbyUI(){
     await leaveRoom(); show('home');
   });
 
-  $('vsAgain').addEventListener('click', ()=>{ show('lobby'); });
-  $('vsHome').addEventListener('click', async ()=>{ await leaveRoom(); show('home'); });
+  /* 這兩個都要先離開舊房間 —— 那場已經結算完，留著會讓下次回到前景時
+     又被接回一個結束的房間。房主離開會順手刪掉整個節點。 */
+  $('vsAgain').addEventListener('click', async ()=>{
+    myReady = false; lastState = null;
+    await leaveRoom();
+    openLobby();
+  });
+  $('vsHome').addEventListener('click', async ()=>{
+    myReady = false; lastState = null;
+    await leaveRoom(); show('home');
+  });
 
   if(!canNativeShare()) $('shareBtn').textContent = '複製房號';
 
-  installVisibilityHandler();
+  /* 回到前景時若房間已失效（打完了、對手走了），把人帶回首頁並說明原因，
+     而不是讓他停在一個早就結束的房間畫面上。 */
+  installVisibilityHandler((reason)=>{
+    endVersus();
+    lastState = null;
+    show('home');
+    showErr(reason);
+  });
   onRoomChange(render);
 }
 
@@ -204,6 +220,12 @@ async function doJoin(raw){
 export async function autoJoinFromUrl(){
   const code = codeFromUrl();
   if(!code) return false;
+  /* 連結指向的房間可能早就打完了（朋友分享的連結過了一小時）。
+     先清一輪，joinRoom 也會再擋一次。 */
+  if(await reapIfDead(code)){
+    showErr('這個房間已經結束了');
+    return false;
+  }
   const me = meIdentity();
   if(!me){
     /* 還沒登入 —— 記下來，登入後再自動加入 */
@@ -332,6 +354,9 @@ function render(v){
     if(v.state==='counting' && v.startAt) onCounting(v);
     if(v.state==='done') onDone(v);
   }
+  /* result 出現也視為結束。比 state 可靠：任一方都能寫 result，
+     但只有房主能改 state —— 房主先離線時 state 會永遠卡在 counting。 */
+  if(v.result && vs.active) onDone(v);
 
   /* --- 對戰中：更新對手比分 --- */
   if(vs.active && op){
