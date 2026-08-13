@@ -507,8 +507,20 @@ document.querySelectorAll('[data-sfx]').forEach(b=>b.addEventListener('click',()
 
 /* ============ 首次使用提醒 ============
    規格第 8 節：顯示簡短運動免責提醒，並明確告知影像在本機處理。 */
-const CONSENT_KEY = 'reproom.consent.v1';
-const consented = ()=>{ try{ return localStorage.getItem(CONSENT_KEY)==='1'; }catch(e){ return false; } };
+const CONSENT_KEY = 'pushroom.consent.v1';
+/* 改名前的 key。已經看過提醒的人不該因為改名而再看一次。 */
+const CONSENT_LEGACY = 'reproom.consent.v1';
+const consented = ()=>{
+  try{
+    if(localStorage.getItem(CONSENT_KEY)==='1') return true;
+    if(localStorage.getItem(CONSENT_LEGACY)==='1'){
+      localStorage.setItem(CONSENT_KEY,'1');
+      localStorage.removeItem(CONSENT_LEGACY);
+      return true;
+    }
+    return false;
+  }catch(e){ return false; }
+};
 const setConsented = ()=>{ try{ localStorage.setItem(CONSENT_KEY,'1'); }catch(e){} };
 
 /* 同意後要接著做的事（例如「按了開始但還沒同意」→ 同意完直接開始） */

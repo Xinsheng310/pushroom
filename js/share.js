@@ -28,7 +28,7 @@ export async function shareCode(code){
     try{
       /* title 不放房號 —— 有些 App 只取 title，會讓連結消失。
          把完整資訊放在 text，url 另外給，讓 App 自己決定怎麼組。 */
-      await navigator.share({ title:'REP ROOM', text, url:shareUrl(code) });
+      await navigator.share({ title:'PUSH ROOM', text, url:shareUrl(code) });
       log('已透過系統分享選單分享');
       return 'shared';
     }catch(e){

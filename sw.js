@@ -14,8 +14,8 @@
 
    4. 換版時清掉舊快取，避免舊 JS 與新 HTML 混搭。 */
 
-const VERSION = 'v4';
-const CACHE = 'reproom-' + VERSION;
+const VERSION = 'v5';
+const CACHE = 'pushroom-' + VERSION;
 
 /* 這些是「App 的骨架」，安裝時就抓下來 */
 const PRECACHE = [
@@ -47,9 +47,11 @@ const PRECACHE = [
 
 self.addEventListener('install', e=>{
   e.waitUntil((async ()=>{
-    const c = await caches.open(CACHE);
-    /* 個別 add，一個失敗不要讓整個安裝失敗 */
-    await Promise.allSettled(PRECACHE.map(u=>c.add(new Request(u, {cache:'reload'}))));
+    if(!DEV){
+      const c = await caches.open(CACHE);
+      /* 個別 add，一個失敗不要讓整個安裝失敗 */
+      await Promise.allSettled(PRECACHE.map(u=>c.add(new Request(u, {cache:'reload'}))));
+    }
     self.skipWaiting();
   })());
 });
@@ -62,8 +64,15 @@ self.addEventListener('activate', e=>{
   })());
 });
 
+/* 本機開發時完全不介入 —— 開發中改了檔案卻被快取供應舊版，
+   會變成「明明改了卻沒效果」的假 bug，非常難查。
+   正式環境（github.io）才啟用快取。 */
+const DEV = self.location.hostname === 'localhost'
+         || self.location.hostname === '127.0.0.1';
+
 /** 這個請求該不該被 SW 處理 */
 function shouldHandle(req){
+  if(DEV) return false;
   if(req.method !== 'GET') return false;
   const url = new URL(req.url);
   /* 只管自己的網域。Firebase / MediaPipe / Google Fonts 一律直接走網路。 */

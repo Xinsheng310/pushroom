@@ -15,7 +15,10 @@
 
 import { log } from './log.js';
 
-const KEY = 'reproom.calib.v1';
+const KEY = 'pushroom.calib.v1';
+/* 舊名稱（App 曾叫 REP ROOM）。讀不到新 key 時搬過來，
+   使用者手機上已經校正好的資料不該因為改名而消失。 */
+const LEGACY_KEY = 'reproom.calib.v1';
 /** 超過這個時間就建議重新校正（毫秒） */
 export const STALE_MS = 24*60*60*1000;
 
@@ -34,7 +37,19 @@ export const STALE_MS = 24*60*60*1000;
 /** 讀取存檔。格式不對或不存在回傳 null。 */
 export function loadCalib(){
   let raw;
-  try{ raw = localStorage.getItem(KEY); }catch(e){ return null; }
+  try{
+    raw = localStorage.getItem(KEY);
+    /* 改名前的存檔：搬到新 key 再刪舊的，只會發生一次 */
+    if(!raw){
+      const legacy = localStorage.getItem(LEGACY_KEY);
+      if(legacy){
+        localStorage.setItem(KEY, legacy);
+        localStorage.removeItem(LEGACY_KEY);
+        raw = legacy;
+        log('已搬移舊版校正存檔');
+      }
+    }
+  }catch(e){ return null; }
   if(!raw) return null;
   try{
     const c = JSON.parse(raw);
@@ -74,7 +89,11 @@ export function saveCalib({key, up, down, score, thDown, thUp, front}){
 }
 
 export function clearCalib(){
-  try{ localStorage.removeItem(KEY); log('校正紀錄已清除'); }catch(e){}
+  try{
+    localStorage.removeItem(KEY);
+    localStorage.removeItem(LEGACY_KEY);   // 順手清掉可能還在的舊 key
+    log('校正紀錄已清除');
+  }catch(e){}
 }
 
 /** 存檔是否已過期（建議重新校正，但仍可用） */
