@@ -5,17 +5,15 @@
 
    專案：pushroom-5c735（Spark 免費方案）
 
-   ⚠ apiKey / messagingSenderId / appId 三項必須從 Firebase 控制台取得：
-     專案設定 → 一般 → 你的應用程式 → 網頁應用 → firebaseConfig
-   填好後把下方 PENDING 的值換掉。 */
+   來源：Firebase 控制台 → 專案設定 → 一般 → 你的應用程式 → 網頁應用 */
 
 export const firebaseConfig = {
-  apiKey:            "PENDING",
+  apiKey:            "AIzaSyAWmffbMitSpqko3U0fZQFHevlKHDvz45o",
   authDomain:        "pushroom-5c735.firebaseapp.com",
   projectId:         "pushroom-5c735",
   storageBucket:     "pushroom-5c735.firebasestorage.app",
-  messagingSenderId: "PENDING",
-  appId:             "PENDING",
+  messagingSenderId: "472594373179",
+  appId:             "1:472594373179:web:6ea35f90c9594e08d5da1e",
   databaseURL:       "https://pushroom-5c735-default-rtdb.asia-southeast1.firebasedatabase.app",
 };
 
