@@ -64,9 +64,16 @@ export async function recordMatch({code, startAt, durationSec, a, b}){
     log('比賽紀錄已寫入');
     return 'created';
   }catch(e){
-    /* 對方先寫了。不是錯誤。 */
-    log('比賽紀錄已由對方寫入');
-    return 'exists';
+    /* 規則不允許 update，所以「同一 matchId 已存在」會被拒 —— 那是去重機制生效。
+       但網路失敗也會落在這裡，若一律回報 'exists'，
+       「紀錄遺失」與「已去重」就變得無法區分 —— 而戰績是這個 App 的核心價值。 */
+    const msg = (e?.code || e?.message || '').toString();
+    if(/permission|denied|PERMISSION|already exists/i.test(msg)){
+      log('比賽紀錄已由對方寫入');
+      return 'exists';
+    }
+    log('比賽紀錄寫入失敗：'+msg.slice(0,90));
+    return 'failed';
   }
 }
 

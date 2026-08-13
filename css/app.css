@@ -355,6 +355,9 @@ body{
 .vsscore small{display:block;color:var(--dim);font-size:11px;margin-top:4px;
   max-width:11ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vsscoresep{font-size:26px;color:var(--dim)}
+/* 戰績沒同步成功時的提示。不擋畫面、不搶焦點 ——
+   但也不能悄悄吞掉，戰績是這個 App 的核心價值。 */
+.syncwarn{margin:18px 0 0;font-size:11px;color:var(--dim);text-align:center}
 
 /* ---------- 對戰中的對手比分（規格第 7 節：唯一該強化的） ---------- */
 #vsLive{position:absolute;left:0;right:0;top:calc(var(--safe-t) + 84px);

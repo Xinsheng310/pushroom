@@ -765,6 +765,11 @@ $('start').addEventListener('click', ()=>{
     if(!getStream()){ show('home'); return; }
     warned10 = false; calibReturn = 'run';
     $('cancelSetup').textContent = '取消';
+    /* 已經有可用的校正就直接倒數 —— 首頁的 calibChip 明白寫著
+       「按開始會直接計時，不用再校正」，若這裡仍跑一次完整校正
+       （8.7 秒）就是介面在說謊，而且是回訪者每次都要付的代價。
+       要重校的人按 calibChip 的「清除」即可。 */
+    if(S.key){ startCountdown(); return; }
     beginCalibration();
   });
 });

@@ -314,8 +314,12 @@ export async function writeResult(hostReps, guestReps){
       { hostReps:h, guestReps:g, winner });
     log('結算寫入 '+h+':'+g+' → '+winner);
   }catch(e){
-    /* 對方先寫了就會走到這裡，不是錯誤 */
-    log('結算已由對方寫入');
+    /* 規則是 create-only，對方先寫了就會被拒 —— 那是預期行為。
+       但不能把「所有失敗」都當成這種情況：網路斷線、規則變更也會落在這裡，
+       混為一談會讓真正的錯誤永遠查不到。用 permission 相關字樣區分。 */
+    const msg = (e?.code || e?.message || '').toString();
+    if(/permission|denied|PERMISSION/i.test(msg)) log('結算已由對方寫入');
+    else log('結算寫入失敗：'+msg.slice(0,80));
   }
   return winner;
 }

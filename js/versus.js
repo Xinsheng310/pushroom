@@ -418,6 +418,7 @@ async function onCounting(v){
   vs.opUid = v.opponent?.uid || null;
   vs.code = v.code;
   vs.startAtServer = v.startAt;
+  $('vsSyncWarn').hidden = true;      // 上一場的警告不要留到這場
 
   /* 套用本場的判定門檻。基準（up/down）各自校正 —— 那是裝置相依的數值，
      共用會完全錯亂；門檻是比例值，統一才公平。詳見 calibmode.js 的說明。
@@ -549,7 +550,7 @@ async function persistMatch(myReps){
   const a = iAmHost ? meSide : opSide;
   const b = iAmHost ? opSide : meSide;
 
-  await recordMatch({
+  const rec = await recordMatch({
     code: vs.code || getCode(),
     startAt: vs.startAtServer,
     durationSec: vs.durationSec,
@@ -559,6 +560,11 @@ async function persistMatch(myReps){
   const outcome = myReps > vs.opReps ? 'win' : myReps < vs.opReps ? 'loss' : 'draw';
   const next = await applyMatchStats(me.uid, myReps, outcome);
   if(next) log(`戰績更新：${next.wins}勝${next.losses}敗${next.draws}平`);
+
+  /* 紀錄真的沒寫成功時要讓使用者知道 —— 戰績是這個 App 的核心價值，
+     悄悄遺失比顯示一行小字糟糕得多。不用擋畫面，結算照常顯示。 */
+  const lost = rec === 'failed' || !next;
+  $('vsSyncWarn').hidden = !lost;
   /* 讓首頁的統計立刻反映新數字 */
   refreshProfile().catch(()=>{});
 }
