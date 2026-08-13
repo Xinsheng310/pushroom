@@ -1,6 +1,12 @@
 /* PUSH ROOM — 樣式
-   從 docs/pushup-arena-mvp.html 的 <style> 區塊原樣搬出，數值未改動。
-   設計語彙見 REPROOM_BUILD_SPEC.md 第 7 節。 */
+
+   起源是 docs/pushup-arena-mvp.html 的 <style> 區塊，但已歷經多輪演出調整：
+   面板轉場、倒數演出、勝負形態、刻度尺、色彩紀律、掃描線。
+   設計語彙與效能約束見 docs/PUSHROOM_BUILD_SPEC.md 第 7 節。
+
+   ⚠ 計數中（#run）只允許 transform / opacity 動畫。
+   #count 有 mix-blend-mode:difference，加任何會建立 isolation group 的屬性
+   （transform/opacity/filter）都會讓混色失效，數字在亮背景下會消失。 */
 
 :root{
   --ink:#0B0F14;

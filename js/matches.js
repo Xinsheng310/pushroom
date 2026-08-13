@@ -1,6 +1,6 @@
 /* 對戰紀錄與勝敗統計（Firestore）
 
-   資料模型見 REPROOM_BUILD_SPEC.md 第 4.2 節。
+   資料模型見 PUSHROOM_BUILD_SPEC.md 第 4.2 節。
 
    matchId 的設計：兩人 uid 排序後組合 + 房號 + 開賽時間戳。
    排序是為了讓雙方算出「完全相同」的 id —— 規格第 5 節的規則是

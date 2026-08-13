@@ -2,6 +2,7 @@
   "name": "PUSH ROOM — 伏地挺身計數器",
   "short_name": "PUSH ROOM",
   "description": "用手機鏡頭數伏地挺身，跟朋友開房間即時對戰。影像完全在裝置本機處理。",
+  "version": "0.9.0",
   "lang": "zh-Hant",
   "dir": "ltr",
   "start_url": "./",

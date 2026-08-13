@@ -6,16 +6,33 @@
 
 影像完全在裝置本機處理，不會上傳到任何伺服器。
 
-## 現況
+## 現況 — V0.9
 
-規格第 11 節的八個步驟全部完成：
+規格第 11 節的八個步驟全部完成，另加三輪 UI/UX 演出與效能優化。
 
+**功能**
 - 單機計數：姿勢偵測、兩段式校正（結果存本機自動帶入）、音效、計時結算、測試模式
 - Google 登入與自訂暱稱（不沿用 Google 真名、不儲存 email）
 - 四碼房號對戰：建房/加入/分享、presence 與 30 秒斷線寬限、伺服器時鐘同步、對手即時比分
 - 判定標準可選：標準 / 寬鬆 / 房主的 / 各自 —— 雙方套用同一組門檻，基準各自校正
-- 戰績：勝敗統計與對戰紀錄（Firestore）
+- 對戰時長：30 秒 / 1 分 / 2 分 / 無限（無限由任一方長按 ✕ 結束）
+- 戰績：勝敗統計與對戰紀錄清單（Firestore）
 - PWA：可加入主畫面
+
+**效能與省電**
+- 只在校正/倒數/計數時做姿勢推論，其餘畫面完全停止
+- 同一 video frame 只推論一次（原本因去重失效而推論兩次）
+- 首頁不啟用相機；進背景停止供幀、超過 30 秒完整釋放
+- **比賽進行中一律豁免**：不停供幀、不釋放相機，避免回來時漏算
+- 測試模式可看推論/幀時間的 p50/p95 與長幀次數
+
+**演出**
+- 面板轉場、倒數放大收縮、勝負以形態區分（不靠顏色）、結算數字滾動
+- 骨架顏色隨下壓深度由冷青燒到訊號橘（零成本，同時是功能回饋）
+- 深度計是完整刻度尺，含上下兩條判定門檻線
+- 音效層次：深度驅動的漸強嗡鳴、每 5/10 下的和聲、對手加分的低音撥弦
+
+**尚未驗證**：兩台實體裝置的多場對戰、長時間使用的熱節流表現。
 
 ## 線上版
 
@@ -77,33 +94,46 @@ winner 必須與次數相符、`startAt` 必須是伺服器時間戳、已寫入
 ## 專案結構
 
 ```
-index.html          畫面結構
-css/app.css         樣式
-js/log.js           畫面內日誌（手機沒有 console）
-js/audio.js         Web Audio 合成音效
-js/pose.js          相機 + MediaPipe 模型 + 骨架繪製
-js/detect.js        偵測演算法（訊號、校正、計數狀態機）
-js/ui.js            DOM 存取與渲染
-js/main.js          主流程
-manifest.json       PWA 設定
-sw.js               Service Worker（只快取靜態資源）
-icons/              PWA 圖示
-firestore.rules     Firestore 安全規則
+index.html              畫面結構（11 個 panel）
+css/app.css             樣式與所有演出
+manifest.json           PWA 設定
+sw.js                   Service Worker（只快取靜態資源；localhost 不介入）
+icons/                  PWA 圖示（程式產生的 PR 字標）
+firestore.rules         Firestore 安全規則
 firestore.indexes.json  複合索引（戰績查詢用）
-database.rules.json Realtime Database 安全規則
-firebase.json       規則/索引位置與 emulator 設定
-tests/              迴歸測試
-docs/               規格書與原始單檔版
+database.rules.json     Realtime Database 安全規則
+firebase.json           規則/索引位置與 emulator 設定
+tests/                  迴歸測試（10 支）
+docs/                   規格書與原始單檔版
 ```
 
-`js/` 內的模組：`log` `audio` `pose` `detect` `ui` `firebase` `auth` `matches`
-`room` `roomcode` `clock` `share` `versus` `calibmode` `calibstore` `main`
+`js/` 模組：
+
+| 檔案 | 職責 |
+|---|---|
+| `log.js` | 畫面內日誌與錯誤橫幅（手機沒有 console） |
+| `audio.js` | Web Audio 合成音效 + 深度驅動的嗡鳴 |
+| `pose.js` | 相機開關/省電 + MediaPipe 模型 + 骨架繪製 |
+| `detect.js` | **偵測演算法**（訊號、校正、計數狀態機）— 勿改 |
+| `perf.js` | 推論/幀時間的 p50/p95 與長幀統計 |
+| `calibmode.js` | 判定標準（標準/寬鬆/房主的/各自） |
+| `calibstore.js` | 校正結果存本機與過期判斷 |
+| `ui.js` | DOM 存取、面板切換與所有演出的觸發 |
+| `firebase.js` | Firebase 初始化（失敗時降級為單機） |
+| `auth.js` | Google 登入與暱稱 |
+| `matches.js` | 對戰紀錄與勝敗統計 |
+| `room.js` | 房間、presence、斷線寬限、死房間清理 |
+| `roomcode.js` | 四碼房號產生與誤輸入正規化 |
+| `clock.js` | 伺服器時鐘同步與對齊計時器 |
+| `share.js` | 分享房號（native share / 剪貼簿 / LINE） |
+| `versus.js` | 對戰流程（大廳→等待→倒數→對戰→結算） |
+| `main.js` | 主迴圈、校正流程、省電策略、導覽 |
 
 無框架、無打包工具，原生 ES modules，GitHub Pages 直接吃靜態檔案。
 
 ## 注意
 
-`js/detect.js` 的偵測演算法是實機調校過的，數值不要隨意改動。規格見 [建置規格書](docs/REPROOM_BUILD_SPEC.md) 第 3 節。
+`js/detect.js` 的偵測演算法是實機調校過的，數值不要隨意改動。規格見 [建置規格書](docs/PUSHROOM_BUILD_SPEC.md) 第 3 節。
 
 ## 免責
 

@@ -1,6 +1,6 @@
 /* 房間 — 建房、加入、presence、斷線寬限
 
-   資料模型見 REPROOM_BUILD_SPEC.md 第 4.1 節，流程見第 6 節。
+   資料模型見 PUSHROOM_BUILD_SPEC.md 第 4.1 節，流程見第 6 節。
 
    幾個關鍵設計（都是規格第 6.4、6.5 節的要求）：
 
