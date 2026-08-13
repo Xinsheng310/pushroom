@@ -179,6 +179,22 @@ body{
 #clock{font-family:Anton,sans-serif;font-size:46px;line-height:1;letter-spacing:.02em}
 #clock.warn{color:var(--signal)}
 #hud .meta{text-align:right;font-size:11px;letter-spacing:.14em;color:var(--dim);line-height:1.9}
+/* 手動計數的大點擊區：只在「沒校正」時啟用，蓋住畫面中段。
+   校正過的人不鋪這層 —— 做伏地挺身時手掌誤觸會加出假次數，
+   而計數準確是這個 App 的全部意義。 */
+#tapCount{position:absolute;left:0;right:0;top:18%;bottom:18%;
+  border:0;background:transparent;padding:0;cursor:pointer}
+#tapCount:active{background:rgba(255,90,31,.08)}
+
+/* 校正過的人用這顆小按鈕當退路（相機拍不到時），放左下角避開中止鈕。
+   往上抬 66px 是為了避開錯誤橫幅 #err（z-index:99、佔滿底部）——
+   否則正好在出錯時按不到這顆，那時候最需要它。 */
+#manualBtn{position:absolute;left:14px;bottom:calc(var(--safe-b) + 66px);
+  min-width:44px;height:44px;padding:0 12px;border-radius:99px;
+  border:1px solid var(--line);background:rgba(11,15,20,.55);
+  color:var(--dim);font-family:"Roboto Mono",monospace;font-size:15px}
+#manualBtn:active{border-color:var(--signal);color:var(--signal)}
+
 #gauge{position:absolute;right:16px;top:26%;bottom:26%;width:8px;border:1px solid var(--line);border-radius:99px;overflow:hidden}
 #gaugeFill{position:absolute;left:0;right:0;bottom:0;height:0%;background:var(--cool);transition:height .06s linear}
 #gauge .mark{position:absolute;left:-5px;right:-5px;height:1px;background:rgba(255,255,255,.4)}

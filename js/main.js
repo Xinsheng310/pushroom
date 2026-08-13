@@ -219,13 +219,51 @@ function beginVsRun(timer, durationSec, onRep, onEnd, manual=false){
   clearTicks();
   $('clock').classList.remove('warn');
   $('markDown').style.bottom = (TH.down*100)+'%';
-  /* 沒校正的裝置（例如用電腦當房主）只能手動計數，要講清楚怎麼按 */
-  $('status').textContent = manual ? '按空白鍵或點數字計數' : '下到底 → 撐起來';
+  /* 手動計數的兩種介面，取捨如下：
+       沒校正（例如用電腦當房主）→ 鋪滿中段的大點擊區，因為那是唯一的計數方式
+       已校正 → 只給左下角一顆小 +1，當相機實際拍不到時的退路
+     不給已校正的人鋪大點擊區，是因為做伏地挺身時手掌誤觸會加出假次數，
+     而計數準確是這個 App 的全部意義。 */
+  $('status').textContent = manual ? '按空白鍵或點畫面計數' : '下到底 → 撐起來';
+  $('tapCount').hidden = !manual;
+  $('manualBtn').hidden = manual;
   show('run');
   requestWakeLock();
+  startVsClock();
+}
+
+/* 對戰時鐘用獨立的 interval 驅動，不依賴相機影格。
+   原本時鐘寫在 onFrame 裡，而 onFrame 只有在 video.readyState>=2 時才會被呼叫 ——
+   相機拿不到影像（例如用電腦當房主）時整個倒數就完全不動，
+   時間到也不會結算。時鐘是比賽的骨幹，不該綁在相機上。 */
+let vsClockTimer = null;
+function startVsClock(){
+  stopVsClock();
+  const tick = ()=>{
+    if(S.phase!=='vsrun'){ stopVsClock(); return; }
+    const left = vsRun.timer.remainingTo(vsRun.durationSec*1000);
+    $('clock').textContent = fmt(Math.max(0,left));
+    if(left<=10000){
+      $('clock').classList.add('warn');
+      if(!vsRun.warned){ vsRun.warned = true; sfx.warn(); }
+    }
+    if(left<=0){
+      stopVsClock();
+      S.phase = 'done'; releaseWakeLock();
+      vsRun.onEnd?.(S.reps);
+    }
+  };
+  tick();
+  vsClockTimer = setInterval(tick, 100);
+}
+function stopVsClock(){
+  if(vsClockTimer){ clearInterval(vsClockTimer); vsClockTimer = null; }
+  $('tapCount').hidden = true;
+  $('manualBtn').hidden = true;
 }
 
 function abortVsRun(){
+  stopVsClock();
   if(S.phase==='vsrun'){ S.phase='idle'; releaseWakeLock(); }
 }
 
@@ -235,19 +273,10 @@ function onFrame(lm, ts){
   fpsTick(ts);
   if(isLabOpen()) labUpdate(lm, ts);
 
-  /* ---- 對戰中 ---- */
+  /* ---- 對戰中 ----
+     時鐘與結算由 startVsClock() 的 interval 負責（不依賴相機影格），
+     這裡只做「有影像時的自動計數」。 */
   if(S.phase==='vsrun'){
-    const left = vsRun.timer.remainingTo(vsRun.durationSec*1000);
-    $('clock').textContent = fmt(Math.max(0,left));
-    if(left<=10000){
-      $('clock').classList.add('warn');
-      if(!vsRun.warned){ vsRun.warned = true; sfx.warn(); }
-    }
-    if(left<=0){
-      S.phase = 'done'; releaseWakeLock();
-      vsRun.onEnd?.(S.reps);
-      return;
-    }
     const r = track(lm, ts);
     if(r===null){ $('status').textContent='看不到你 — 調整位置'; return; }
     $('gaugeFill').style.height = Math.min(100, S.depth*100)+'%';
@@ -643,7 +672,10 @@ function manualRep(){
 addEventListener('keydown', e=>{
   if(e.code==='Space' && S.phase==='vsrun'){ e.preventDefault(); manualRep(); }
 });
-$('count').addEventListener('click', manualRep);
+/* 不能綁在 #count 上 —— 它有 pointer-events:none（純顯示層），
+   點擊會直接穿透過去。改用專屬的透明點擊區。 */
+$('tapCount').addEventListener('click', manualRep);
+$('manualBtn').addEventListener('click', manualRep);
 
 /* ============ 啟動 ============ */
 log('UA '+navigator.userAgent.slice(0,90));
