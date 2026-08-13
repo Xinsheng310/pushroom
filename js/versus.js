@@ -12,7 +12,7 @@ import { $, show, showCountdown, clearCountdown, flash, rollNumber, replay } fro
 import { sfx, audioOn } from './audio.js';
 import {
   createRoom, joinRoom, leaveRoom, onRoomChange, startMatch, setState, setReady,
-  setCalibMode, pushReps, writeResult, opponentGrace, getCode, isHost, inRoom,
+  setCalibMode, setCalibrating, pushReps, writeResult, opponentGrace, getCode, isHost, inRoom,
   installVisibilityHandler, reapIfDead,
 } from './room.js';
 import { MODES, DEFAULT_MODE, modeLabel, modeHint, thresholdsFor } from './calibmode.js';
@@ -74,6 +74,82 @@ let currentMode = DEFAULT_MODE;
 let myReady = false;
 /** 是否已經為「對手出現」演出過（避免每次 render 都重播） */
 let sawOpponent = false;
+/** 使用者手動開合過摺疊 —— 之後就不再自動幫他決定 */
+let foldPinned = false;
+/** 校正逾時保險 */
+let calibFlagTimer = null;
+
+/* ============ 等待室的四個階段 ============
+
+   等待室其實是一台狀態機，任何一刻只有一件該做的事。
+   把「現在是哪個階段」抽成純函式，是為了能直接測 ——
+   四個階段 × 對手在不在 × 準備了沒，用手點很難點全。 */
+
+export const PHASES = ['ph-share','ph-ready','ph-guest-set','ph-guest-wait'];
+
+/** 每個階段的提示文字。只講當下該做的那一件事。 */
+export const PHASE_HINT = {
+  'ph-share':      '把房號念給朋友，或按分享傳給他',
+  'ph-ready':      '對手到了。確認校正後就能開始',
+  'ph-guest-set':  '先校正，然後按準備',
+  'ph-guest-wait': '已準備，等房主開始',
+};
+
+/**
+ * 決定等待室目前的階段。
+ * @param {{isHost:boolean, hasOpponent:boolean, meReady:boolean}} s
+ * @returns {'ph-share'|'ph-ready'|'ph-guest-set'|'ph-guest-wait'}
+ */
+export function waitPhase(s){
+  if(s.isHost) return s.hasOpponent ? 'ph-ready' : 'ph-share';
+  return s.meReady ? 'ph-guest-wait' : 'ph-guest-set';
+}
+
+/**
+ * 房主現在能不能按開始。
+ * @param {{opponent:object|null, opponentCalibrating:boolean}} s
+ */
+export function canHostStart(s){
+  const op = s.opponent;
+  return !!op && !!op.online && !!op.ready && !s.opponentCalibrating;
+}
+
+/** 開始鈕該顯示什麼字（也解釋了為什麼不能按） */
+export function startLabel(s){
+  const op = s.opponent;
+  if(!op) return '等對手加入';
+  if(!op.online) return '對手連線中…';
+  if(s.opponentCalibrating) return '等對方校正完';
+  if(!op.ready) return '等對手按準備';
+  return '開始';
+}
+
+/**
+ * 展開／收合賽前設定。
+ * @param {boolean} open
+ * @param {boolean} [manual] 使用者自己按的。按過之後就不再自動幫他開合 ——
+ *                           階段一變就把他打開的東西收起來，會像介面在跟他作對。
+ */
+function setFold(open, manual=false){
+  if(foldPinned && !manual) return;
+  if(manual) foldPinned = true;
+  $('waitFoldBody').dataset.open = String(open);
+  $('waitFoldBtn').setAttribute('aria-expanded', String(open));
+}
+
+/**
+ * 標記自己正在校正，讓對手看得到。
+ * 除了 room.js 的 onDisconnect 之外再加一道 12 秒逾時 ——
+ * 那道防的是斷線，這道防的是「沒斷線但流程卡住」（例如相機開不起來）。
+ */
+function markCalibrating(on){
+  clearTimeout(calibFlagTimer); calibFlagTimer = null;
+  if(!inRoom()) return;
+  setCalibrating(on).catch(()=>{});
+  if(on){
+    calibFlagTimer = setTimeout(()=>{ setCalibrating(false).catch(()=>{}); }, 12000);
+  }
+}
 
 export function initLobbyUI(){
   $('vsDurations').addEventListener('click', e=>{
@@ -101,10 +177,20 @@ export function initLobbyUI(){
     catch(e){ showErr('改不了判定標準，網路可能不穩。再按一次試試。'); }
   });
 
-  /* 等待室內自行校正 —— 雙方都能按，各自校正自己的基準 */
+  /* 賽前設定摺疊。使用者手動開合後就尊重他的選擇，
+     不要再被階段切換自動蓋掉 —— 那會讓人覺得介面在跟自己作對。 */
+  $('waitFoldBtn').addEventListener('click', ()=>{
+    audioOn();
+    setFold($('waitFoldBtn').getAttribute('aria-expanded') !== 'true', true);
+  });
+
+  /* 等待室內自行校正 —— 雙方都能按，各自校正自己的基準。
+     校正約 8.7 秒，期間畫面會切到 #setup，對手完全看不到我在幹嘛，
+     所以要先把 calibrating 寫上去讓對方知道。 */
   $('wCalibBtn').addEventListener('click', ()=>{
     audioOn();
-    hooks.beginCalibration?.(()=>{});
+    markCalibrating(true);
+    hooks.beginCalibration?.(()=> markCalibrating(false));
   });
 
   $('createRoom').addEventListener('click', async ()=>{
@@ -172,19 +258,20 @@ export function initLobbyUI(){
   });
 
   $('waitLeave').addEventListener('click', async ()=>{
-    myReady = false;
+    myReady = false; foldPinned = false;
+    clearTimeout(calibFlagTimer); calibFlagTimer = null;
     await leaveRoom(); show('home');
   });
 
   /* 這兩個都要先離開舊房間 —— 那場已經結算完，留著會讓下次回到前景時
      又被接回一個結束的房間。房主離開會順手刪掉整個節點。 */
   $('vsAgain').addEventListener('click', async ()=>{
-    myReady = false; lastState = null;
+    myReady = false; lastState = null; foldPinned = false;
     await leaveRoom();
     openLobby();
   });
   $('vsHome').addEventListener('click', async ()=>{
-    myReady = false; lastState = null;
+    myReady = false; lastState = null; foldPinned = false;
     await leaveRoom(); show('home');
   });
 
@@ -271,7 +358,8 @@ async function hostStart(){
        沒校正的人可以用手動計數（空白鍵／點畫面）。 */
     await startMatch(COUNTDOWN_SEC);
   }catch(e){
-    showErr(e.message || String(e));
+    log('開始失敗：'+(e.message||e));
+    showErr('開不了賽，網路可能不穩。再按一次試試。');
     $('goMatch').disabled = false;
     $('goMatch').textContent = '開始';
   }
@@ -343,20 +431,36 @@ function render(v){
     ? '可自動計數'
     : '未校正 — 需手動計數';
   $('wCalibBtn').textContent = calibrated ? '重新校正' : '校正';
+  /* 摺疊起來時要靠摘要知道目前設定，否則收起來等於藏資訊 */
+  $('waitFoldSum').textContent =
+    modeLabel(currentMode) + ' · ' + (calibrated ? '已校正' : '尚未校正');
+
+  /* --- 對手正在校正 ---
+     校正約 8.7 秒，對方畫面已切走、毫無動靜。
+     沒有這一列的話，等待方只會覺得「他是不是掛了」。 */
+  const peerCalib = !!v.opponentCalibrating;
+  $('calibPeer').hidden = !peerCalib;
+  if(peerCalib){
+    $('peerState').textContent = (op?.name || '對方') + ' 正在校正…';
+    /* 給一個大概的終點 —— 有終點的等待跟沒終點的等待是兩回事 */
+    $('peerHint').textContent = '大約十秒，等他擺完兩個姿勢';
+  }
+
+  /* 未校正而且已經可以開賽時，校正列是唯一還擋著的東西 */
+  $('wCalibBar').classList.toggle('urgent', !calibrated && !!op);
 
   if(v.isHost){
     /* 只有房主能開始（規格第 6.3 節：這同時擋掉亂猜房號的人）。
        對手必須按下準備才能開始 —— 避免手機還在口袋裡就被開賽。 */
     $('readyBtn').hidden = true;
     $('goMatch').hidden = false;
-    const canStart = !!op && op.online && !!op.ready;
+    /* 對方正在校正時也不能開 —— 他的畫面在校正流程裡，
+       此時開賽會把人從校正中途拽走，那是實打實的計數錯誤。 */
+    const canStart = canHostStart({opponent:op, opponentCalibrating:peerCalib});
     /* 從不能按變成能按時給一次解鎖提示 —— 房主可能正在看手機以外的地方 */
     if(canStart && $('goMatch').disabled) replay($('goMatch'), 'unlocked');
     $('goMatch').disabled = !canStart;
-    $('goMatch').textContent = !op ? '等對手加入'
-      : !op.online ? '對手連線中…'
-      : !op.ready ? '等對手按準備'
-      : '開始';
+    $('goMatch').textContent = startLabel({opponent:op, opponentCalibrating:peerCalib});
   }else{
     /* 訪客：顯示準備按鈕，不顯示開始鈕 */
     $('goMatch').hidden = true;
@@ -364,6 +468,17 @@ function render(v){
     $('readyBtn').textContent = myReady ? '取消準備' : '我準備好了';
     $('waitNote').textContent = myReady ? '等房主開始' : '';
   }
+
+  /* --- 階段：決定「現在該做的那一件事」是哪一個 ---
+     由單一 class 驅動 CSS，而不是逐一控制九個區塊的 hidden。 */
+  const phase = waitPhase({isHost:v.isHost, hasOpponent:!!op, meReady:myReady});
+  const wait = $('wait');
+  for(const p of PHASES) wait.classList.toggle(p, p===phase);
+  $('waitHint').textContent = PHASE_HINT[phase];
+  /* 沒事可做的階段把設定收起來，有事要確認的階段展開 */
+  setFold(phase==='ph-ready' || phase==='ph-guest-set');
+  /* 離開房間在「正在等」的階段退到背景，不跟主要動作搶 */
+  $('waitLeave').classList.toggle('recede', phase!=='ph-guest-wait');
 
   /* --- 狀態轉換 --- */
   if(v.state !== lastState){
@@ -395,6 +510,7 @@ const currentPanel = ()=>
 export function refreshWaitRoom(){
   if(lastView) render(lastView);
 }
+
 let lastView = null;
 
 /* ============ 同步倒數 → 對戰 ============ */

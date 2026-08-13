@@ -74,7 +74,8 @@ onAuthChange(renderAccount);
 
 $('signOut').addEventListener('click', async ()=>{
   audioOn();
-  try{ await signOut(); }catch(e){ showErr('登出失敗：'+(e.message||e)); }
+  try{ await signOut(); }
+  catch(e){ showErr('登出沒成功，重新整理頁面即可。'); }
 });
 
 /* ============ 戰績 ============ */
@@ -96,7 +97,13 @@ $('historyBtn').addEventListener('click', async ()=>{
   const u = getUser(), p = getProfile();
   if(!u) return;
   const s = p?.stats || {};
-  $('hStatsLine').textContent = `${s.wins ?? 0}勝 ${s.losses ?? 0}敗 ${s.draws ?? 0}平`;
+  const w = s.wins ?? 0, l = s.losses ?? 0, d = s.draws ?? 0;
+  $('hStatsLine').textContent = `${w}勝 ${l}敗 ${d}平`;
+  /* 大字底下給一句人話。純數字不會告訴你「這算好還是不好」。 */
+  const played = w + l + d;
+  $('hRecordSub').textContent = !played
+    ? '還沒有對戰紀錄'
+    : (w > l ? '勝多敗少' : w < l ? '再練練' : '勢均力敵');
   $('hTotal').textContent = s.totalReps ?? 0;
   $('hBest').textContent = s.bestSession ?? 0;
   $('hMatches').textContent = s.matches ?? 0;

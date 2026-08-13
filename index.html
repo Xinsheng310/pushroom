@@ -60,11 +60,11 @@
     <div class="hz hz2">
       <div class="field">
         <label>時間</label>
-        <div class="chips" id="durations">
-          <button class="chip" data-sec="30">0:30</button>
-          <button class="chip" data-sec="60" aria-checked="true">1:00</button>
-          <button class="chip" data-sec="120">2:00</button>
-          <button class="chip" data-sec="0">無限</button>
+        <div class="chips" id="durations" role="radiogroup" aria-label="時間">
+          <button class="chip" role="radio" data-sec="30">0:30</button>
+          <button class="chip" role="radio" data-sec="60" aria-checked="true">1:00</button>
+          <button class="chip" role="radio" data-sec="120">2:00</button>
+          <button class="chip" role="radio" data-sec="0">無限</button>
         </div>
       </div>
 
@@ -78,11 +78,11 @@
         <div id="camSetBody" hidden>
           <div class="toggle">
             <span>前鏡頭<small>手機放頭部下方時用前鏡頭；放身側拍全身用後鏡頭</small></span>
-            <button class="sw" id="swCam" aria-checked="true"></button>
+            <button class="sw" role="switch" id="swCam" aria-checked="true" aria-label="使用前鏡頭"></button>
           </div>
           <div class="toggle">
             <span>顯示骨架<small>確認鏡頭有抓到你，會稍微耗電</small></span>
-            <button class="sw" id="swSkel" aria-checked="true"></button>
+            <button class="sw" role="switch" id="swSkel" aria-checked="true" aria-label="顯示骨架"></button>
           </div>
         </div>
       </div>
@@ -100,9 +100,9 @@
 
       <!-- 系統狀態列。載入中由這裡播報，而不是讓橘色 CTA 去當載入指示器 ——
            橘色出現本身就是「開機完成」的訊號。 -->
-      <div class="sysline mono" id="sysLine"><i></i><span id="sysText">MODEL · LOADING</span></div>
+      <div class="sysline mono" id="sysLine" role="status" aria-live="polite"><i></i><span id="sysText">MODEL · LOADING</span></div>
       <button class="cta" id="start" disabled>開始</button>
-      <button class="ghost" id="versusBtn" style="width:100%;margin-top:12px;padding:16px" hidden>跟朋友對戰</button>
+      <button class="ghost wide stack" id="versusBtn" hidden>跟朋友對戰</button>
       <p class="vshint" id="versusHint" hidden>需要登入才能開房間</p>
       <p class="note" id="homeNote">按下開始才會啟用相機。首次會做 <b>兩次校正</b>：先撐直手臂，再下到最低點，之後開始計時。<button class="linkbtn" id="labBtn">測試模式</button></p>
     </div>
@@ -110,22 +110,27 @@
 
   <!-- HISTORY — 戰績 -->
   <section id="history" class="panel">
-    <div class="labwrap">
+    <div class="labwrap hwrap">
       <div class="labhead">
-        <div>
-          <div class="step mono">戰績</div>
-          <div style="font-size:17px;font-weight:700;margin-top:2px" id="hStatsLine">—</div>
-        </div>
-        <button class="ghost" id="historyClose" style="padding:10px 16px">關閉</button>
+        <div class="step mono">戰績</div>
+        <button class="ghost corner" id="historyClose">關閉</button>
       </div>
 
-      <div class="stats" style="margin-top:0">
+      <!-- 勝敗是這個畫面的主角。原本它是小標題底下的一行 17px 文字，
+           跟測試模式的除錯面板長得一樣 —— 唯一展示個人成果的畫面
+           卻是全案視覺重量最輕的。改用 display 字體撐起來。 -->
+      <div class="record">
+        <b class="display" id="hStatsLine">—</b>
+        <small id="hRecordSub">還沒有對戰紀錄</small>
+      </div>
+
+      <div class="stats flush">
         <div><b class="mono" id="hTotal">0</b><small>累計次數</small></div>
         <div><b class="mono" id="hBest">0</b><small>單場最佳</small></div>
         <div><b class="mono" id="hMatches">0</b><small>對戰場數</small></div>
       </div>
 
-      <div class="card">
+      <div class="card hcard">
         <div class="cardtitle mono">最近的對戰</div>
         <ul class="mlist" id="matchList"></ul>
         <p class="hint" id="matchHint">載入中…</p>
@@ -139,27 +144,27 @@
       <div class="step mono">對戰</div>
       <h2 class="display sheeth">開房間<br>或加入</h2>
 
-      <div class="field" style="margin-top:22px">
+      <div class="field far">
         <label>時間</label>
-        <div class="chips" id="vsDurations">
-          <button class="chip" data-sec="30">0:30</button>
-          <button class="chip" data-sec="60" aria-checked="true">1:00</button>
-          <button class="chip" data-sec="120">2:00</button>
-          <button class="chip" data-sec="0">無限</button>
+        <div class="chips" id="vsDurations" role="radiogroup" aria-label="時間">
+          <button class="chip" role="radio" data-sec="30">0:30</button>
+          <button class="chip" role="radio" data-sec="60" aria-checked="true">1:00</button>
+          <button class="chip" role="radio" data-sec="120">2:00</button>
+          <button class="chip" role="radio" data-sec="0">無限</button>
         </div>
-        <p class="note" id="vsDurHint" style="margin-top:8px" hidden>無限賽制沒有時限，任一方長按 ✕ 就結束。</p>
+        <p class="note" id="vsDurHint" hidden>無限賽制沒有時限，任一方長按 ✕ 就結束。</p>
       </div>
-      <div class="field" style="margin-top:18px">
+      <div class="field">
         <label>算一下的標準</label>
-        <div class="chips" id="vsModes">
-          <button class="chip" data-mode="standard" aria-checked="true">標準</button>
-          <button class="chip" data-mode="loose">寬鬆</button>
-          <button class="chip" data-mode="hostth">我的</button>
-          <button class="chip" data-mode="custom">各自</button>
+        <div class="chips" id="vsModes" role="radiogroup" aria-label="算一下的標準">
+          <button class="chip" role="radio" data-mode="standard" aria-checked="true">標準</button>
+          <button class="chip" role="radio" data-mode="loose">寬鬆</button>
+          <button class="chip" role="radio" data-mode="hostth">我的</button>
+          <button class="chip" role="radio" data-mode="custom">各自</button>
         </div>
-        <p class="note" id="modeHint" style="margin-top:8px">要下到接近最低點才算一下</p>
+        <p class="note" id="modeHint">要下到接近最低點才算一下</p>
       </div>
-      <button class="cta" id="createRoom" style="width:100%;margin-top:14px">開一間</button>
+      <button class="cta stack gap" id="createRoom">開一間</button>
 
       <div class="orsep"><span>或</span></div>
 
@@ -167,25 +172,27 @@
       <div class="row">
         <input id="codeInput" class="input mono codein" type="text" maxlength="5"
                inputmode="latin" autocomplete="off" autocapitalize="characters"
-               spellcheck="false" placeholder="ABCD" style="margin-top:0">
-        <button class="ghost" id="joinRoom" style="flex:0 0 auto;padding:16px 22px">加入</button>
+               spellcheck="false" placeholder="ABCD">
+        <button class="ghost fit" id="joinRoom">加入</button>
       </div>
       <div id="lobbyErr" class="nameerr" hidden></div>
 
-      <button class="ghost" id="lobbyBack" style="width:100%;margin-top:20px;padding:15px">回首頁</button>
+      <button class="ghost wide stack far" id="lobbyBack">回首頁</button>
     </div>
   </section>
 
   <!-- WAIT — 等待對手 / 房間內 -->
-  <section id="wait" class="panel">
+  <!-- 預設帶 ph-share：render() 一定會覆寫，但萬一它出錯，
+       畫面至少停在「房主等人」而不是一片空白 -->
+  <section id="wait" class="panel ph-share">
     <div class="sheet">
       <div class="step mono" id="waitRole">房主</div>
       <div class="codebig display" id="codeBig">————</div>
-      <p class="sub" style="max-width:none" id="waitHint">把房號給朋友，他輸入後就會出現在下面。</p>
+      <p class="sub full" id="waitHint">把房號給朋友，他輸入後就會出現在下面。</p>
 
-      <div class="row" style="margin-top:6px">
-        <button class="ghost" id="shareBtn" style="flex:1;padding:15px">分享房號</button>
-        <button class="ghost" id="lineBtn" style="flex:0 0 auto;padding:15px 18px">LINE</button>
+      <div class="row stack sharerow">
+        <button class="ghost grow wide" id="shareBtn">分享房號</button>
+        <button class="ghost fit" id="lineBtn">LINE</button>
       </div>
       <div id="shareMsg" class="sharemsg" hidden></div>
 
@@ -201,33 +208,56 @@
         </div>
       </div>
 
-      <!-- 本場的判定標準 + 自己的校正狀態 -->
-      <div class="modebar">
+      <!-- 對手正在校正時才出現。校正約 8.7 秒，這段時間對方毫無動靜，
+           沒有這一列的話等待的人只會覺得「他是不是掛了」。 -->
+      <div class="calibpeer" id="calibPeer" hidden>
         <div>
-          <span class="mono" id="wModeName">標準</span>
-          <small id="wModeHint">要下到接近最低點才算一下</small>
+          <span class="mono" id="peerState">對方正在校正…</span>
+          <small id="peerHint">大約十秒，等他擺完兩個姿勢</small>
         </div>
-        <button class="ghost mini" id="wModeChange" hidden>更改</button>
+        <i class="peerfill" aria-hidden="true"></i>
       </div>
-      <div class="calibbar">
-        <div>
-          <span class="mono" id="wCalibState">尚未校正</span>
-          <small id="wCalibHint">校正後才能自動計數</small>
+
+      <!-- 賽前設定：判定標準 + 自己的校正狀態。
+           這兩項在「等朋友進來」與「已按準備」時都不是當下的任務，
+           收進摺疊裡，需要時才展開。 -->
+      <div class="fold" id="waitFold">
+        <button class="foldhead mono" id="waitFoldBtn" aria-expanded="true" aria-controls="waitFoldBody">
+          <span>賽前設定</span>
+          <small id="waitFoldSum">標準 · 尚未校正</small>
+        </button>
+        <!-- data-open 要有初始值，否則第一次繪製時 CSS 還沒有依據 -->
+        <div class="foldbody" id="waitFoldBody" data-open="true">
+          <div class="foldinner">
+            <div class="modebar">
+              <div>
+                <span class="mono" id="wModeName">標準</span>
+                <small id="wModeHint">要下到接近最低點才算一下</small>
+              </div>
+              <button class="ghost mini" id="wModeChange" hidden>更改</button>
+            </div>
+            <div class="calibbar" id="wCalibBar">
+              <div>
+                <span class="mono" id="wCalibState">尚未校正</span>
+                <small id="wCalibHint">校正後才能自動計數</small>
+              </div>
+              <button class="ghost mini" id="wCalibBtn">校正</button>
+            </div>
+          </div>
         </div>
-        <button class="ghost mini" id="wCalibBtn">校正</button>
       </div>
 
       <!-- 訪客用：告訴房主我準備好了 -->
-      <button class="cta" id="readyBtn" style="width:100%;margin-top:18px" hidden>我準備好了</button>
-      <button class="cta" id="goMatch" style="width:100%;margin-top:18px" disabled>等對手加入</button>
-      <button class="ghost" id="waitLeave" style="width:100%;margin-top:8px;padding:15px">離開房間</button>
+      <button class="cta stack gap" id="readyBtn" hidden>我準備好了</button>
+      <button class="cta stack gap" id="goMatch" disabled>等對手加入</button>
+      <button class="ghost wide stack" id="waitLeave">離開房間</button>
       <p class="note" id="waitNote"></p>
     </div>
   </section>
 
   <!-- VSRESULT — 對戰結算 -->
   <section id="vsresult" class="panel">
-    <div class="sheet" style="text-align:center">
+    <div class="sheet mid">
       <div class="step mono" id="vsVerdictCap">結果</div>
       <div class="display vsverdict" id="vsVerdict">—</div>
       <div class="vsscore">
@@ -236,8 +266,8 @@
         <div><b class="mono" id="vsOpReps">0</b><small id="vsOpName">對手</small></div>
       </div>
       <p class="syncwarn" id="vsSyncWarn" hidden>戰績沒同步成功，這場可能沒被記錄</p>
-      <button class="cta" id="vsAgain" style="width:100%;margin-top:26px">再來一場</button>
-      <button class="ghost" id="vsHome" style="width:100%;margin-top:8px;padding:15px">回首頁</button>
+      <button class="cta stack far" id="vsAgain">再來一場</button>
+      <button class="ghost wide stack" id="vsHome">回首頁</button>
     </div>
   </section>
 
@@ -246,14 +276,14 @@
     <div class="sheet">
       <div class="step mono">暱稱</div>
       <h2 class="display sheeth">對手會看到<br>這個名字</h2>
-      <p class="sub" style="max-width:none">不要用真名。這個名字會顯示在對手的畫面上。</p>
+      <p class="sub full">不要用真名。這個名字會顯示在對手的畫面上。</p>
       <input id="nameInput" class="input mono" type="text" maxlength="20"
              autocomplete="off" autocapitalize="off" spellcheck="false"
              placeholder="輸入暱稱">
       <div id="nameErr" class="nameerr" hidden></div>
-      <div class="row" style="margin-top:18px">
-        <button class="ghost" id="nameCancel" style="flex:0 0 auto;padding:16px 20px">取消</button>
-        <button class="cta" id="nameSave" style="flex:1;font-size:18px;padding:16px">存起來</button>
+      <div class="row stack gap">
+        <button class="ghost fit" id="nameCancel">取消</button>
+        <button class="cta grow" id="nameSave">存起來</button>
       </div>
     </div>
   </section>
@@ -267,7 +297,7 @@
         <li><b>影像不會離開你的手機。</b>姿勢偵測完全在裝置本機運算，畫面不上傳、不儲存、不經過任何伺服器。</li>
         <li><b>運動有風險。</b>有心血管疾病、關節傷病、懷孕或其他身體狀況，請先諮詢醫師。過程中感到胸悶、頭暈、關節疼痛請立即停止。</li>
       </ul>
-      <button class="cta" id="consentOk" style="width:100%;margin-top:20px;font-size:20px">我知道了</button>
+      <button class="cta stack far consentcta" id="consentOk">我知道了</button>
     </div>
   </section>
 
@@ -275,7 +305,7 @@
   <section id="setup" class="panel">
     <div id="setupBody">
       <div class="step mono" id="stepLabel">STEP 1 / 3</div>
-      <div class="say" id="say">正在找你…</div>
+      <div class="say" id="say" role="status" aria-live="assertive">正在找你…</div>
       <svg class="ring" viewBox="0 0 120 120" id="ring" style="visibility:hidden">
         <circle class="bg" cx="60" cy="60" r="52"></circle>
         <circle class="fg" cx="60" cy="60" r="52" stroke-dasharray="327" stroke-dashoffset="327"></circle>
@@ -297,7 +327,7 @@
         <div id="metaBest">BEST —</div>
       </div>
     </div>
-    <div id="count">0</div>
+    <div id="count" role="status" aria-live="polite">0</div>
     <!-- 手動計數的點擊區。#count 有 pointer-events:none（純顯示用），
          所以另外鋪一層透明區域接點擊。只在對戰且未校正時啟用。 -->
     <button id="tapCount" hidden aria-label="手動計數 +1"></button>
@@ -313,15 +343,18 @@
       <div class="mark" id="markDown"></div>
     </div>
     <div id="cadence"></div>
-    <div id="status">下到底 → 撐起來，一下算一次</div>
+    <div id="status" role="status" aria-live="polite">下到底 → 撐起來，一下算一次</div>
     <!-- 校正過但相機實際拍不到時的退路，刻意做小、放角落避免誤觸 -->
     <button id="manualBtn" hidden>+1</button>
-    <button id="abort">✕</button>
+    <button id="abort" aria-label="長按結束這一場">✕</button>
+    <!-- 只在「按了但放太早」時出現。原本放開就是靜默取消，
+         第一次用的人會以為按鈕壞了。 -->
+    <p class="aborthint" id="abortHint" hidden>長按才會結束</p>
   </section>
 
   <!-- RESULT -->
   <section id="result" class="panel">
-    <div style="text-align:center">
+    <div class="mid">
       <div class="cap mono">TOTAL REPS</div>
       <div class="big" id="rTotal">0</div>
     </div>
@@ -332,8 +365,8 @@
     </div>
     <canvas id="chart"></canvas>
     <div class="row">
-      <button class="ghost" id="again" style="flex:1;padding:18px">再來一次</button>
-      <button class="cta" id="home2" style="flex:1;font-size:18px;padding:18px">回首頁</button>
+      <button class="ghost grow" id="again">再來一次</button>
+      <button class="cta grow" id="home2">回首頁</button>
     </div>
   </section>
 
@@ -343,9 +376,9 @@
       <div class="labhead">
         <div>
           <div class="step mono">TEST MODE</div>
-          <div style="font-size:17px;font-weight:700;margin-top:2px">自己測</div>
+          <div class="bigline">自己測</div>
         </div>
-        <button class="ghost" id="labExit" style="padding:10px 16px">關閉</button>
+        <button class="ghost corner" id="labExit">關閉</button>
       </div>
 
       <div class="card">
@@ -366,12 +399,12 @@
           <div>
             <div class="mono" id="labState">尚未校正</div>
             <div class="bar"><div id="labBar"></div><i id="labDown"></i><i id="labUp"></i></div>
-            <div class="mono" id="labDepth" style="color:var(--dim);font-size:11px">depth —</div>
+            <div class="mono labdepth" id="labDepth">depth —</div>
           </div>
         </div>
-        <div class="row" style="margin-top:12px">
-          <button class="ghost" id="labCalib" style="flex:1;padding:13px">開始校正</button>
-          <button class="ghost" id="labReset" style="flex:0 0 auto;padding:13px 16px">歸零</button>
+        <div class="row stack">
+          <button class="ghost grow" id="labCalib">開始校正</button>
+          <button class="ghost fit" id="labReset">歸零</button>
         </div>
         <label class="slide">下壓門檻 <b class="mono" id="vDown">0.72</b>
           <input type="range" id="thDown" min="0.4" max="0.95" step="0.01" value="0.72"></label>
@@ -382,7 +415,7 @@
 
       <div class="card">
         <div class="cardtitle mono">音效</div>
-        <div class="row" style="flex-wrap:wrap">
+        <div class="row wrap">
           <button class="ghost mini" data-sfx="bottom">到底</button>
           <button class="ghost mini" data-sfx="rep">完成一下</button>
           <button class="ghost mini" data-sfx="tick">倒數</button>
@@ -394,11 +427,11 @@
 
       <div class="card">
         <div class="cardtitle mono">效能</div>
-        <div class="mono" id="perfLine" style="font-size:12px;line-height:1.7;color:var(--cool)">尚未取樣</div>
+        <div class="mono perfline" id="perfLine">尚未取樣</div>
         <p class="hint">推論 / 幀時間顯示 <b>p50 / p95</b>（毫秒）。長幀 = 超過 45ms + 超過 80ms 的次數。<br>
           掉幀會讓動作的上下邊緣被錯過而少算次數，所以看的是 p95 而不是平均。
           加了新特效後比對長幀次數有沒有增加。</p>
-        <button class="ghost mini" id="perfResetBtn" style="margin-top:4px">歸零重測</button>
+        <button class="ghost mini" id="perfResetBtn">歸零重測</button>
       </div>
 
       <div class="card">
@@ -408,7 +441,8 @@
     </div>
   </section>
 
-  <div id="err"></div>
+  <!-- role=alert：錯誤要被立刻播報，不能等使用者剛好聚焦到這裡 -->
+  <div id="err" role="alert" aria-live="assertive"></div>
 </div>
 
 

@@ -68,7 +68,7 @@ export function watchAuth(){
 
 /* ============ 登入 / 登出 ============ */
 export async function signIn(){
-  if(!isReady()) throw new Error('Firebase 未就緒');
+  if(!isReady()) throw new Error('連不上伺服器，稍後再試。單機計數不受影響。');
   const { auth: A } = getSdk();
   const provider = new A.GoogleAuthProvider();
   /* 每次都讓使用者選帳號，避免多帳號的人被自動登入到不想用的那個 */
@@ -123,7 +123,7 @@ async function loadOrCreateProfile(user){
 
 /** 更新暱稱。回傳更新後的 profile。 */
 export async function setDisplayName(name){
-  if(!isReady() || !currentUser) throw new Error('尚未登入');
+  if(!isReady() || !currentUser) throw new Error('請先登入。');
   const n = (name||'').trim();
   if(!validName(n)) throw new Error('暱稱要 1 到 '+NAME_MAX+' 個字');
 

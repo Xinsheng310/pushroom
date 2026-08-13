@@ -520,22 +520,45 @@ $('cancelSetup').addEventListener('click',()=>{
    而它旁邊就是手動計數鈕。誤觸中止會毀掉整場，多花半秒換掉這個風險。 */
 const ABORT_HOLD_MS = 450;
 let abortTimer = null;
+/* 這次長按有沒有真的完成。放開時要靠它分辨「已經結束了」與「放太早」——
+   兩種情況都會走到 abortHoldEnd，但只有後者該給提示。 */
+let abortFired = false;
 const abortBtn = $('abort');
 
 function abortHoldStart(e){
   if(S.phase!=='run' && S.phase!=='vsrun') return;
   e.preventDefault();
+  abortFired = false;
   abortBtn.classList.add('holding');
   clearTimeout(abortTimer);
   abortTimer = setTimeout(()=>{
+    abortFired = true;
     abortBtn.classList.remove('holding');
     if(S.phase==='run') finish();
     else if(S.phase==='vsrun'){ vsRun.onEnd?.(S.reps); stopVsClock(); S.phase='done'; }
   }, ABORT_HOLD_MS);
 }
 function abortHoldEnd(){
+  const wasHolding = !!abortTimer;
   clearTimeout(abortTimer); abortTimer = null;
   abortBtn.classList.remove('holding');
+  /* 按了卻放太早 —— 原本是靜默取消，第一次用的人會以為按鈕壞了。
+     就地說明它需要長按。 */
+  if(wasHolding && !abortFired) showAbortHint();
+}
+
+/* 提示靠動畫自己收尾（keyframes 最後停在 opacity:0）。
+   但 replay() 在 prefers-reduced-motion 下不做事 —— 那時動畫不會跑，
+   訊息就會永遠留在畫面上。所以那條路徑要自己收。 */
+let abortHintTimer = null;
+function showAbortHint(){
+  const el = $('abortHint');
+  clearTimeout(abortHintTimer);
+  el.hidden = false;
+  el.classList.remove('aborthint');
+  void el.offsetWidth;
+  el.classList.add('aborthint');
+  abortHintTimer = setTimeout(()=>{ el.hidden = true; }, 1700);
 }
 abortBtn.addEventListener('pointerdown', abortHoldStart);
 abortBtn.addEventListener('pointerup', abortHoldEnd);
@@ -643,7 +666,10 @@ $('versusBtn').addEventListener('click', ()=>{
         if(!getUser()) return;            // 使用者取消
         if(usingDefaultName()){ openNamePanel(); return; }
       }catch(e){
-        showErr('登入失敗：'+(e.message||e));
+        /* Firebase 的錯誤代碼對使用者沒有意義。
+           真正的原因寫進紀錄，畫面上只講他能做的事。 */
+        log('登入失敗：'+(e.message||e));
+        showErr('登入沒成功，可能是被瀏覽器擋掉了彈出視窗。再試一次。');
         return;
       }finally{
         $('versusBtn').disabled = false;

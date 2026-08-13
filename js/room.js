@@ -84,6 +84,9 @@ function view(){
     opponentPresent: !!opRaw,
     opponentOnline: !!opRaw?.online,
     opponentStale: !!opRaw && !opRaw.online,
+    /* 對手是否正在校正。校正約 8.7 秒，這段時間他不會有任何動作，
+       沒有這個旗標的話等待方只會覺得「他是不是掛了」。 */
+    opponentCalibrating: !!opRaw?.calibrating,
   };
 }
 
@@ -153,7 +156,7 @@ export async function joinRoom(me, code){
      否則手機關掉畫面再打開時，會被接回一場早就打完的比賽。 */
   if(roomIsDead(d)){
     reapIfDead(code).catch(()=>{});
-    throw new Error('這場已經結束了');
+    throw new Error('這場比賽已經結束了。請朋友重開一間。');
   }
 
   /* 我原本就在這個房間（重新連線的情況）→ 直接接回去 */
@@ -256,6 +259,33 @@ export async function setReady(ready){
 }
 
 /**
+ * 告訴對手「我正在校正」。校正要 8.7 秒，這段時間我的畫面已經切走，
+ * 對方看到的是「我按了準備，他怎麼都不動」—— 沒有這個欄位就無從解釋。
+ *
+ * 開始校正時同時掛 onDisconnect，把它清回 false。
+ * 這不是防禦性加碼：校正時手機躺在地上、人趴著，
+ * 來電／切 App／息屏都很容易發生，斷線後這個旗標若卡在 true，
+ * 對手畫面就永遠停在「對方正在校正」。
+ */
+export async function setCalibrating(on){
+  if(!state.code || !isReady()) return;
+  const { db: D } = getSdk();
+  const ref = D.ref(getRtdb(), `rooms/${state.code}/${state.role}/calibrating`);
+  try{
+    if(on){
+      await D.set(ref, true);
+      try{ await D.onDisconnect(ref).set(false); }catch(e){}
+    }else{
+      /* 先取消 onDisconnect 再寫，否則已排定的斷線動作會留著 */
+      try{ await D.onDisconnect(ref).cancel(); }catch(e){}
+      await D.set(ref, false);
+    }
+  }catch(e){
+    log('校正狀態上傳失敗：'+(e.message||e).toString().slice(0,70));
+  }
+}
+
+/**
  * 房主設定本場的校正模式。雙方套用同一組門檻 → 公平性。
  * @param {string} mode
  * @param {{down:number,up:number}} [hostTh] hostth 模式時要一起寫入房主的門檻
@@ -280,7 +310,7 @@ export async function setCalibMode(mode, hostTh){
  */
 export async function startMatch(countdownSec = 3){
   requireReady();
-  if(state.role !== HOST) throw new Error('只有房主能開始');
+  if(state.role !== HOST) throw new Error('只有開房間的人能按開始。');
   const { db: D } = getSdk();
   const rtdb = getRtdb();
 
