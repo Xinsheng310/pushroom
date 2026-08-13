@@ -8,7 +8,7 @@ export const $ = id => document.getElementById(id);
 export const panels = {
   home:$('home'), setup:$('setup'), run:$('run'), result:$('result'), lab:$('lab'),
   name:$('name'), consent:$('consent'),
-  lobby:$('lobby'), wait:$('wait'), vsresult:$('vsresult'),
+  lobby:$('lobby'), wait:$('wait'), vsresult:$('vsresult'), history:$('history'),
 };
 
 export const show = name =>
@@ -129,6 +129,26 @@ export function renderSignalRows(SIGNALS){
     tr.appendChild(el('td', SIGNALS[k].label));
     tr.appendChild(el('td', '—'));
     return tr;
+  }));
+}
+
+/* ============ 戰績清單 ============
+   對手暱稱是使用者輸入的文字，一律走 textContent（規格第 8 節）。 */
+/**
+ * @param {Array} rows [{verdict:'win'|'loss'|'draw', opName, myReps, opReps, when, durationSec}]
+ */
+export function renderMatchList(rows){
+  const VERDICT = { win:'勝', loss:'敗', draw:'和' };
+  replaceChildren($('matchList'), rows.map(r=>{
+    const li = document.createElement('li');
+    li.appendChild(el('div', VERDICT[r.verdict] || '—', 'verdict '+r.verdict));
+    const who = el('div', null, 'who');
+    who.appendChild(el('b', r.opName || '對手'));
+    who.appendChild(el('small', [r.when, r.durationSec ? r.durationSec+' 秒' : '']
+      .filter(Boolean).join(' · ')));
+    li.appendChild(who);
+    li.appendChild(el('div', `${r.myReps} : ${r.opReps}`, 'score mono'));
+    return li;
   }));
 }
 

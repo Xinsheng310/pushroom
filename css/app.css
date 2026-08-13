@@ -123,6 +123,24 @@ body{
 .calibbar .mini,.modebar .mini{flex:0 0 auto;min-height:44px}
 .calibbar span.ok{color:var(--cool)}
 
+/* ---------- history ---------- */
+#history{padding:0;background:var(--ink)}
+.mlist{list-style:none;margin:0;padding:0}
+.mlist li{display:flex;align-items:center;gap:10px;padding:11px 0;
+  border-bottom:1px solid rgba(255,255,255,.07)}
+.mlist li:last-child{border-bottom:0}
+.mlist .verdict{flex:0 0 auto;width:34px;height:34px;border-radius:99px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:Anton,sans-serif;font-size:14px;border:1px solid var(--line)}
+.mlist .win{color:var(--cool);border-color:rgba(53,224,212,.5)}
+.mlist .loss{color:var(--signal);border-color:rgba(255,90,31,.5)}
+.mlist .draw{color:var(--dim)}
+.mlist .who{flex:1 1 auto;min-width:0}
+.mlist .who b{display:block;font-size:14px;font-weight:500;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mlist .who small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
+.mlist .score{flex:0 0 auto;font-family:"Roboto Mono",monospace;font-size:15px}
+
 /* 首頁的校正存檔提示 */
 .calibchip{display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:9px 13px;margin-bottom:8px;border:1px solid var(--line);border-radius:2px;

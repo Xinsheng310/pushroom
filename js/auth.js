@@ -138,6 +138,20 @@ export async function setDisplayName(name){
 /** 使用者是否還在用預設暱稱（用來提示他去改） */
 export const usingDefaultName = ()=> profile?.displayName === DEFAULT_NAME;
 
+/** 重新讀取自己的資料。對戰結算後叫這個，讓首頁統計立刻更新。 */
+export async function refreshProfile(){
+  if(!isReady() || !currentUser) return null;
+  const { store: S } = getSdk();
+  try{
+    const snap = await S.getDoc(S.doc(getDb(),'users',currentUser.uid));
+    if(snap.exists()){ profile = snap.data(); emit(); }
+    return profile;
+  }catch(e){
+    log('重新讀取個人資料失敗：'+(e.message||e).toString().slice(0,80));
+    return null;
+  }
+}
+
 /* ============ 戰績累加 ============ */
 /**
  * 單機練習結束後累加個人統計。

@@ -10,13 +10,14 @@ import {
 import {
   $, panels, show, isLabOpen, fmt, setRing, setRingStroke, showRing,
   renderCalibReport, addTick, clearTicks, pulse, drawChart,
-  renderChecks, renderSignalRows, updateSignalRow,
+  renderChecks, renderSignalRows, updateSignalRow, renderMatchList,
 } from './ui.js';
 import { initFirebase, isReady } from './firebase.js';
 import {
   watchAuth, onAuthChange, signIn, signOut, setDisplayName,
-  validName, usingDefaultName, addSession, getProfile, NAME_MAX,
+  validName, usingDefaultName, addSession, getProfile, getUser, NAME_MAX,
 } from './auth.js';
+import { listMyMatches, outcomeFor } from './matches.js';
 import {
   initLobbyUI, openLobby, installVersusHooks, isVersusActive,
   autoJoinFromUrl, flushPendingJoin, refreshWaitRoom,
@@ -504,6 +505,54 @@ $('signOut').addEventListener('click', async ()=>{
   audioOn();
   try{ await signOut(); }catch(e){ showErr('登出失敗：'+(e.message||e)); }
 });
+
+/* ============ 戰績 ============ */
+function relTime(ts){
+  if(!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const min = Math.floor((Date.now() - d.getTime())/60000);
+  if(min < 1) return '剛剛';
+  if(min < 60) return min+' 分鐘前';
+  const hr = Math.floor(min/60);
+  if(hr < 24) return hr+' 小時前';
+  const day = Math.floor(hr/24);
+  if(day < 30) return day+' 天前';
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+$('historyBtn').addEventListener('click', async ()=>{
+  audioOn();
+  const u = getUser(), p = getProfile();
+  if(!u) return;
+  const s = p?.stats || {};
+  $('hStatsLine').textContent = `${s.wins ?? 0}勝 ${s.losses ?? 0}敗 ${s.draws ?? 0}平`;
+  $('hTotal').textContent = s.totalReps ?? 0;
+  $('hBest').textContent = s.bestSession ?? 0;
+  $('hMatches').textContent = s.matches ?? 0;
+  renderMatchList([]);
+  $('matchHint').textContent = '載入中…';
+  show('history');
+
+  const list = await listMyMatches(u.uid, 20);
+  if(!list.length){
+    $('matchHint').textContent = '還沒有對戰紀錄。跟朋友開一間房就有了。';
+    return;
+  }
+  renderMatchList(list.map(m=>{
+    const iAmA = m.a?.uid === u.uid;
+    const me = iAmA ? m.a : m.b, op = iAmA ? m.b : m.a;
+    return {
+      verdict: outcomeFor(u.uid, m),
+      opName: op?.name,
+      myReps: me?.reps ?? 0,
+      opReps: op?.reps ?? 0,
+      when: relTime(m.playedAt),
+      durationSec: m.durationSec,
+    };
+  }));
+  $('matchHint').textContent = '';
+});
+$('historyClose').addEventListener('click', ()=> show('home'));
 
 /* ============ 暱稱設定 ============ */
 function openNamePanel(){

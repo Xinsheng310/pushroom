@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    {
+      "//": "listMyMatches：where(players array-contains uid) + orderBy(playedAt desc)。Firestore 要求這種組合必須有複合索引，否則查詢會直接失敗。",
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "players", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "playedAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

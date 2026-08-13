@@ -40,6 +40,7 @@
             <small id="acctStats">—</small>
           </div>
           <div class="row">
+            <button class="ghost mini" id="historyBtn">戰績</button>
             <button class="ghost mini" id="editName">改暱稱</button>
             <button class="ghost mini" id="signOut">登出</button>
           </div>
@@ -85,6 +86,31 @@
         <button class="ghost" id="labBtn" style="flex:1;padding:16px">測試模式</button>
       </div>
       <p class="note" id="homeNote">需要相機權限。按下開始後會做 <b>兩次校正</b>：先撐直手臂，再下到最低點，之後才開始計時。</p>
+    </div>
+  </section>
+
+  <!-- HISTORY — 戰績 -->
+  <section id="history" class="panel">
+    <div class="labwrap">
+      <div class="labhead">
+        <div>
+          <div class="step mono">戰績</div>
+          <div style="font-size:17px;font-weight:700;margin-top:2px" id="hStatsLine">—</div>
+        </div>
+        <button class="ghost" id="historyClose" style="padding:10px 16px">關閉</button>
+      </div>
+
+      <div class="stats" style="margin-top:0">
+        <div><b class="mono" id="hTotal">0</b><small>累計次數</small></div>
+        <div><b class="mono" id="hBest">0</b><small>單場最佳</small></div>
+        <div><b class="mono" id="hMatches">0</b><small>對戰場數</small></div>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">最近的對戰</div>
+        <ul class="mlist" id="matchList"></ul>
+        <p class="hint" id="matchHint">載入中…</p>
+      </div>
     </div>
   </section>
 

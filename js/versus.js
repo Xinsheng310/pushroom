@@ -19,7 +19,8 @@ import { MODES, DEFAULT_MODE, modeLabel, modeHint, thresholdsFor } from './calib
 import { normalizeCode, isValidCode, codeFromUrl } from './roomcode.js';
 import { alignedTimer, msUntil } from './clock.js';
 import { shareCode, lineUrl, canNativeShare } from './share.js';
-import { getUser, getProfile } from './auth.js';
+import { getUser, getProfile, refreshProfile } from './auth.js';
+import { recordMatch, applyMatchStats } from './matches.js';
 
 const COUNTDOWN_SEC = 3;
 
@@ -391,6 +392,12 @@ async function onCounting(v){
   vs.myReps = 0;
   vs.opReps = v.opponent?.reps || 0;
   vs.timer = alignedTimer(startAt);
+  /* 記下寫 Firestore 需要的資料。必須現在抓 ——
+     對手可能在結算前離線，那時 v.opponent 就沒了。
+     startAt 用「按下開始」的原始時戳（不含倒數），雙方算出同一個 matchId。 */
+  vs.opUid = v.opponent?.uid || null;
+  vs.code = v.code;
+  vs.startAtServer = v.startAt;
 
   /* 套用本場的判定門檻。基準（up/down）各自校正 —— 那是裝置相依的數值，
      共用會完全錯亂；門檻是比例值，統一才公平。詳見 calibmode.js 的說明。
@@ -478,7 +485,43 @@ async function onMatchEnd(myReps){
        規則保證同一 result 只能寫一次，先到先算。 */
     await writeResult(hostReps, guestReps);
   }
+
+  /* 長期紀錄寫進 Firestore。放在 UI 之後不阻擋畫面，
+     但要在 leaveRoom 之前 —— 需要房號與雙方身分。 */
+  persistMatch(myReps).catch(e=> log('紀錄失敗：'+(e.message||e).toString().slice(0,70)));
+
   showVsResult();
+}
+
+/**
+ * 把這場寫進 Firestore（matches + 自己的 stats）。
+ *
+ * 雙方都會呼叫，靠 matchId 去重（誰先到算誰的）。
+ * stats 各自更新自己的 —— 規則只允許本人寫自己的 stats。
+ */
+async function persistMatch(myReps){
+  const me = meIdentity();
+  if(!me || !vs.opUid) return;          // 沒登入或抓不到對手身分就跳過
+
+  const iAmHost = isHost();
+  const meSide = { uid:me.uid, name:me.name, reps:myReps };
+  const opSide = { uid:vs.opUid, name:vs.opName, reps:vs.opReps };
+  /* a/b 依 host/guest 固定，讓雙方寫出的內容一致 */
+  const a = iAmHost ? meSide : opSide;
+  const b = iAmHost ? opSide : meSide;
+
+  await recordMatch({
+    code: vs.code || getCode(),
+    startAt: vs.startAtServer,
+    durationSec: vs.durationSec,
+    a, b,
+  });
+
+  const outcome = myReps > vs.opReps ? 'win' : myReps < vs.opReps ? 'loss' : 'draw';
+  const next = await applyMatchStats(me.uid, myReps, outcome);
+  if(next) log(`戰績更新：${next.wins}勝${next.losses}敗${next.draws}平`);
+  /* 讓首頁的統計立刻反映新數字 */
+  refreshProfile().catch(()=>{});
 }
 
 function onDone(){ if(vs.active) showVsResult(); }
