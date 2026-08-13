@@ -66,7 +66,8 @@ export async function openCamera(cfg, video, skel){
     skel.classList.toggle('mirror', cfg.front);
     hideErr();
   }catch(e){
-    const fail = msg => { showErr(msg); log('相機：'+msg); };
+    /* 相機失敗是致命的 —— 不給權限就完全不能計數，不該自動消失 */
+    const fail = msg => { showErr(msg, {fatal:true}); log('相機：'+msg); };
     if(e.message==='insecure' || !window.isSecureContext)
       fail('這個頁面不是安全來源，瀏覽器不給用相機。請用 https:// 網址開啟（或 localhost）。直接開本機檔案是不行的。');
     else if(e.name==='NotAllowedError') fail('相機權限被拒。到瀏覽器網站設定把相機打開，再重新整理。');
@@ -124,7 +125,7 @@ export async function loadModel(onReady){
   }
   modelStatus = '載入失敗';
   onReady(false);
-  showErr('姿勢模型載不下來。開「測試模式」看最下方紀錄。若是在 Claude 預覽視窗裡，沙箱會擋掉 CDN — 請下載檔案放到 https 網址再測。');
+  showErr('偵測模型載不下來，可能是網路不穩。重新整理再試一次。', {fatal:true});
 }
 
 /* ============ 骨架繪製 ============ */

@@ -125,7 +125,7 @@ export async function createRoom(me, durationSec, calibMode='standard', hostTh=n
     log('建立房間 '+code+'（'+durationSec+'秒）');
     return code;
   }
-  throw new Error('房號一直碰撞，請再試一次');
+  throw new Error('開房失敗，請再按一次。');
 }
 
 /* ============ 加入 ============ */
@@ -136,7 +136,7 @@ export async function createRoom(me, durationSec, calibMode='standard', hostTh=n
  */
 export async function joinRoom(me, code){
   requireReady();
-  if(!isValidCode(code)) throw new Error('房號格式不對');
+  if(!isValidCode(code)) throw new Error('房號要四個字。');
   const { db: D } = getSdk();
   const rtdb = getRtdb();
 
@@ -145,7 +145,7 @@ export async function joinRoom(me, code){
   startClockSync();
 
   const snap = await D.get(D.ref(rtdb,'rooms/'+code));
-  if(!snap.exists()) throw new Error('找不到這個房間，房號可能打錯或房間已關閉');
+  if(!snap.exists()) throw new Error('找不到這個房號。可能打錯了，或朋友的房間已經關掉。');
 
   const d = snap.val();
 
@@ -163,7 +163,7 @@ export async function joinRoom(me, code){
   /* 位子被別人佔著。注意這裡要看「有沒有人」而不是「在不在線」——
      對手可能只是暫時斷線還在寬限期內，位子仍然是他的。 */
   if(d.guest && d.guest.uid !== me.uid){
-    if(!seatExpired(d.guest)) throw new Error('這個房間已經有兩個人了');
+    if(!seatExpired(d.guest)) throw new Error('這間已經滿了。請朋友重開一間。');
     log('前一位訪客已超過寬限期，接手位子');
   }
 
@@ -463,5 +463,5 @@ function sideData(me){
   };
 }
 function requireReady(){
-  if(!isReady()) throw new Error('Firebase 未就緒，無法使用房間功能');
+  if(!isReady()) throw new Error('連不上伺服器。單機計數還是可以用，對戰要等連線恢復。');
 }

@@ -4,32 +4,28 @@ import { log, showErr, installGlobalHandlers } from './log.js';
 import { audioOn, audioState, sfx, humStart, humSet, humStop } from './audio.js';
 import {
   openCamera, loadModel, getStream, getLandmarker, getModelStatus, drawSkeleton,
-  setCameraPaused, releaseCamera, isCameraLive,
 } from './pose.js';
+import { SIGNALS, setAspect, TH, S, track, resetCounter } from './detect.js';
 import {
-  SIGNALS, bodyFound, setAspect, SETTLE_MS, HOLD_MS, PASS,
-  scoreCalibration, TH, S, track, resetCounter,
-} from './detect.js';
-import {
-  $, panels, show, isLabOpen, fmt, setRing, setRingStroke, showRing,
-  renderCalibReport, addTick, clearTicks, pulse, drawChart,
-  renderChecks, renderSignalRows, updateSignalRow, renderMatchList,
-  showCountdown, clearCountdown, flash, rollNumber, replay, setGaugeMarks, setScan,
+  $, show, isLabOpen, fmt, showRing, addTick, clearTicks, pulse, drawChart,
+  renderChecks, renderSignalRows, updateSignalRow,
+  showCountdown, clearCountdown, flash, rollNumber, replay, setGaugeMarks,
 } from './ui.js';
-import { initFirebase, isReady } from './firebase.js';
+import { initFirebase } from './firebase.js';
 import {
-  watchAuth, onAuthChange, signIn, signOut, setDisplayName,
-  validName, usingDefaultName, addSession, getProfile, getUser, NAME_MAX,
+  watchAuth, onAuthChange, signIn, usingDefaultName, addSession, getUser,
 } from './auth.js';
-import { listMyMatches, outcomeFor } from './matches.js';
 import {
-  initLobbyUI, openLobby, installVersusHooks, isVersusActive,
+  initLobbyUI, openLobby, installVersusHooks,
   autoJoinFromUrl, flushPendingJoin, refreshWaitRoom,
 } from './versus.js';
 import {
   loadCalib, saveCalib, clearCalib, isStale, matchesCamera, describeAge,
 } from './calibstore.js';
 import { perfInfer, perfFrame, perfGap, perfReset, perfLine } from './perf.js';
+import { requestWakeLock, releaseWakeLock, wakeLockHeld, installPowerHandlers } from './power.js';
+import { beginCalibration, calibFrame, installCalibFlow, resetCalibSearch } from './calibflow.js';
+import { requireConsent, openNamePanel, renderAccount } from './panels.js';
 
 installGlobalHandlers();
 
@@ -167,60 +163,14 @@ function loop(){
 }
 
 /* ============ 校正 ============ */
-let calib = {step:0, t0:0, samples:{}, seenAt:0, holding:false};
+/* 流程本身在 calibflow.js。這裡只留「校正完之後要去哪裡」——
+   那取決於是誰叫起校正的（計時 / 測試模式 / 對戰等待室）。 */
 let calibReturn = 'run';
 /* 對戰校正完成後要回呼給 versus.js（宣告在這裡，避免 TDZ） */
 let vsCalibDone = null;
 /* 使用者自己在測試模式調的門檻。對戰會暫時套用統一門檻，結束後還原，
    否則單機練習會莫名沿用上一場對戰的標準。 */
 const myTh = { ...TH };
-
-function beginCalibration(){
-  S.phase = 'calib';
-  calib = {step:0, t0:0, samples:{}, seenAt:0, holding:false};
-  showRing(false);
-  $('forceUse').style.display = 'none';
-  $('cancelSetup').textContent = '取消';
-  $('stepLabel').textContent = 'STEP 1 / 3';
-  $('say').textContent = '找你';
-  $('subSay').textContent = '上半身進入畫面';
-  show('setup');
-}
-
-function calibPrompt(step){
-  showRing(true);
-  calib.holding = false;
-  setRingStroke('rgba(255,255,255,.28)');
-  setRing(0);
-  if(step===1){ $('stepLabel').textContent='STEP 2 / 3'; $('say').textContent='撐直手臂'; }
-  if(step===2){ $('stepLabel').textContent='STEP 3 / 3'; $('say').textContent='下到最低點'; }
-  $('subSay').textContent = '擺好姿勢';
-  sfx.ready();
-}
-
-function collect(lm){
-  const bucket = calib.samples[calib.step] ||= {};
-  for(const k in SIGNALS){
-    const v = SIGNALS[k].get(lm);
-    if(v!=null) (bucket[k] ||= []).push(v);
-  }
-}
-
-function finishCalibration(){
-  const {report, best} = scoreCalibration(calib.samples);
-  log('校正結果 '+report.map(r=>r.k+'='+(r.score==null?'無資料':r.score.toFixed(1))).join('  '));
-
-  if(best && best.score>=PASS){ applyCalib(best); return; }
-
-  showRing(false);
-  $('say').textContent = '校正未通過';
-  renderCalibReport(report, best, SIGNALS, PASS);
-  $('forceUse').style.display = best? 'block' : 'none';
-  $('forceUse').onclick = ()=>{ log('使用者強制採用 '+best.key); applyCalib(best); };
-  $('cancelSetup').textContent = '重新校正';
-  S.phase = 'idle';
-  sfx.warn();
-}
 
 function applyCalib(best){
   S.key = best.key; S.up = best.up; S.down = best.down; S.ema = null;
@@ -397,37 +347,7 @@ function onFrame(lm, ts){
   }
 
   /* ---- 校正流程 ---- */
-  if(S.phase==='calib'){
-    if(calib.step===0){
-      if(bodyFound(lm)){
-        if(!calib.seenAt) calib.seenAt = ts;
-        if(ts-calib.seenAt>700){ calib.step=1; calib.t0=ts; calibPrompt(1); }
-      } else calib.seenAt = 0;
-      return;
-    }
-    const el = ts-calib.t0;
-    if(el < SETTLE_MS){          // 擺姿勢，不取樣
-      setRing(el/SETTLE_MS);
-      return;
-    }
-    if(!calib.holding){          // 開始取樣
-      calib.holding = true; sfx.tick(); setRing(0);
-      setRingStroke('var(--cool)');
-      $('subSay').textContent = '撐住';
-      /* 掃描線快掃 —— 讓「緩衝期」與「取樣期」在視覺上明確分開。
-         趴著看的時候光靠環的顏色差別分不出來。 */
-      setScan('fast');
-    }
-    const p = Math.min(1, (el-SETTLE_MS)/HOLD_MS);
-    setRing(p);
-    if(lm) collect(lm);
-    if(p>=1){
-      setScan('off');
-      if(calib.step===1){ calib.step=2; calib.t0=ts; calibPrompt(2); }
-      else { sfx.ready(); finishCalibration(); }
-    }
-    return;
-  }
+  if(S.phase==='calib'){ calibFrame(lm, ts); return; }
 
   /* ---- 計時中 ---- */
   if(S.phase!=='run') return;
@@ -476,72 +396,8 @@ function finish(){
   addSession(S.reps);
 }
 
-/* ============ 螢幕恆亮 ============ */
-let wl = null;
-async function requestWakeLock(){ try{ wl = await navigator.wakeLock?.request('screen'); }catch(e){} }
-function releaseWakeLock(){ try{ wl?.release(); }catch(e){} wl = null; }
-
-/* ============ 省電：頁面進背景時的相機處理 ============
-
-   問題：把網頁縮小但沒關掉時，姿勢推論雖然已經停了（見 INFER_PHASES），
-   但「相機硬體」還在持續曝光供幀 —— 那是實實在在的耗電與發熱。
-
-   策略分三層：
-     1. 進背景 → 立刻停止供幀（track.enabled=false）。
-        恢復是即時的，不需重新授權、不需等曝光收斂。
-     2. 背景超過 30 秒 → 完整釋放相機（track.stop()）。
-        代價是回來要重開，iOS 可能重新要求授權、曝光收斂 0.5–2 秒。
-     3. 比賽進行中 → 兩層都豁免，什麼都不動。
-
-   為什麼比賽中要完全豁免：手機躺在地上、使用者趴著做。
-   若切個通知回來相機要重啟 2 秒，那幾下就漏算了 ——
-   規格第 6.4 節說背景/來電/通知是常態，計數準確度優先於省電。 */
-
-const CAM_RELEASE_MS = 30000;
-/* 這些相位代表「正在比賽或準備比賽」，一律不動相機 */
-const CAM_KEEP_PHASES = new Set(['calib','countdown','run','vsrun']);
-let camReleaseTimer = null;
-let camWasReleased = false;
-
-const matchInProgress = ()=> CAM_KEEP_PHASES.has(S.phase);
-
-function onHidden(){
-  if(matchInProgress()){
-    log('進背景但比賽中，相機保持開啟');
-    return;
-  }
-  /* 嗡鳴的 oscillator 不會自己停，切走前要收乾 */
-  humStop();
-  setCameraPaused(true);
-  clearTimeout(camReleaseTimer);
-  camReleaseTimer = setTimeout(()=>{
-    /* 30 秒後才真的釋放。再確認一次相位 —— 這段時間內使用者
-       可能已經回來並開始比賽（雖然那時 onVisible 已經清掉 timer）。 */
-    if(matchInProgress()) return;
-    if(releaseCamera()) camWasReleased = true;
-  }, CAM_RELEASE_MS);
-}
-
-async function onVisible(){
-  clearTimeout(camReleaseTimer); camReleaseTimer = null;
-  if(S.phase==='run' || S.phase==='vsrun') requestWakeLock();
-
-  if(camWasReleased){
-    camWasReleased = false;
-    /* 只有真的需要相機的畫面才重開，回首頁不用急著開 */
-    if(needsInference() || isLabOpen()){
-      log('重新開啟相機…');
-      await openCamera(cfg, video, skel);
-    }
-    return;
-  }
-  setCameraPaused(false);
-}
-
-document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible') onVisible();
-  else onHidden();
-});
+installPowerHandlers(cfg, video, skel, ()=> needsInference() || isLabOpen());
+installCalibFlow(applyCalib, ()=> cfg.front);
 
 /* ============ 測試模式 ============ */
 let fps=0, fpsN=0, fpsT=0;
@@ -560,7 +416,7 @@ function buildChecks(){
       camTrack? (cfg.front?'前鏡頭':'後鏡頭')+'  '+video.videoWidth+'×'+video.videoHeight : '尚未取得'],
     ['姿勢模型', !!landmarker, getModelStatus()],
     ['音訊', ast==='running', ast || '尚未啟用（按任一按鈕即啟用）'],
-    ['螢幕恆亮', !!wl, wl? '已鎖定' : (navigator.wakeLock? '執行時才啟用':'此瀏覽器不支援')],
+    ['螢幕恆亮', wakeLockHeld(), wakeLockHeld()? '已鎖定' : (navigator.wakeLock? '執行時才啟用':'此瀏覽器不支援')],
   ];
 }
 
@@ -615,146 +471,6 @@ document.querySelectorAll('[data-sfx]').forEach(b=>b.addEventListener('click',()
   k==='rep'? sfx.rep(1) : sfx[k]();
 }));
 
-/* ============ 首次使用提醒 ============
-   規格第 8 節：顯示簡短運動免責提醒，並明確告知影像在本機處理。 */
-const CONSENT_KEY = 'pushroom.consent.v1';
-/* 改名前的 key。已經看過提醒的人不該因為改名而再看一次。 */
-const CONSENT_LEGACY = 'reproom.consent.v1';
-const consented = ()=>{
-  try{
-    if(localStorage.getItem(CONSENT_KEY)==='1') return true;
-    if(localStorage.getItem(CONSENT_LEGACY)==='1'){
-      localStorage.setItem(CONSENT_KEY,'1');
-      localStorage.removeItem(CONSENT_LEGACY);
-      return true;
-    }
-    return false;
-  }catch(e){ return false; }
-};
-const setConsented = ()=>{ try{ localStorage.setItem(CONSENT_KEY,'1'); }catch(e){} };
-
-/* 同意後要接著做的事（例如「按了開始但還沒同意」→ 同意完直接開始） */
-let afterConsent = null;
-function requireConsent(next){
-  if(consented()){ next(); return; }
-  afterConsent = next;
-  show('consent');
-}
-$('consentOk').addEventListener('click', ()=>{
-  audioOn(); setConsented();
-  const next = afterConsent; afterConsent = null;
-  next ? next() : show('home');
-});
-
-/* ============ 帳號 UI ============ */
-function renderAccount(user, prof){
-  const signedIn = !!user;
-  /* 未登入時整塊隱藏 —— 登入的動機由「跟朋友對戰」那顆按鈕承擔，
-     首頁不需要兩個各自解釋一次的登入提示。
-     Firebase 沒就緒（設定未填 / CDN 掛）時同樣隱藏，維持純單機體驗。 */
-  $('account').hidden = !(isReady() && signedIn);
-  $('acctIn').hidden  = !signedIn;
-  /* 對戰入口一律顯示，即使沒登入。
-     原本未登入就 hidden，等於新使用者從頭到尾看不到「可以跟朋友對戰」——
-     而那正是這個 App 跟其他計數器的唯一差別。
-     改成：未登入時按下去先登入，成功後直接進大廳。
-     動機在正確的時機出現（為了對戰而登入，不是為了登入而登入）。 */
-  $('versusBtn').hidden = !isReady();
-  $('versusHint').hidden = signedIn;
-  if(signedIn && prof){
-    $('acctName').textContent = prof.displayName;
-    const s = prof.stats || {};
-    $('acctStats').textContent =
-      `累計 ${s.totalReps ?? 0} 下 · 最佳 ${s.bestSession ?? 0} 下 · ${s.wins ?? 0}勝${s.losses ?? 0}敗`;
-  }
-}
-onAuthChange(renderAccount);
-
-$('signOut').addEventListener('click', async ()=>{
-  audioOn();
-  try{ await signOut(); }catch(e){ showErr('登出失敗：'+(e.message||e)); }
-});
-
-/* ============ 戰績 ============ */
-function relTime(ts){
-  if(!ts) return '';
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  const min = Math.floor((Date.now() - d.getTime())/60000);
-  if(min < 1) return '剛剛';
-  if(min < 60) return min+' 分鐘前';
-  const hr = Math.floor(min/60);
-  if(hr < 24) return hr+' 小時前';
-  const day = Math.floor(hr/24);
-  if(day < 30) return day+' 天前';
-  return `${d.getMonth()+1}/${d.getDate()}`;
-}
-
-$('historyBtn').addEventListener('click', async ()=>{
-  audioOn();
-  const u = getUser(), p = getProfile();
-  if(!u) return;
-  const s = p?.stats || {};
-  $('hStatsLine').textContent = `${s.wins ?? 0}勝 ${s.losses ?? 0}敗 ${s.draws ?? 0}平`;
-  $('hTotal').textContent = s.totalReps ?? 0;
-  $('hBest').textContent = s.bestSession ?? 0;
-  $('hMatches').textContent = s.matches ?? 0;
-  renderMatchList([]);
-  $('matchHint').textContent = '載入中…';
-  show('history');
-
-  const list = await listMyMatches(u.uid, 20);
-  if(!list.length){
-    $('matchHint').textContent = '還沒有對戰紀錄。跟朋友開一間房就有了。';
-    return;
-  }
-  renderMatchList(list.map(m=>{
-    const iAmA = m.a?.uid === u.uid;
-    const me = iAmA ? m.a : m.b, op = iAmA ? m.b : m.a;
-    return {
-      verdict: outcomeFor(u.uid, m),
-      opName: op?.name,
-      myReps: me?.reps ?? 0,
-      opReps: op?.reps ?? 0,
-      when: relTime(m.playedAt),
-      durationSec: m.durationSec,
-    };
-  }));
-  $('matchHint').textContent = '';
-});
-$('historyClose').addEventListener('click', ()=> show('home'));
-
-/* ============ 暱稱設定 ============ */
-function openNamePanel(){
-  const prof = getProfile();
-  $('nameInput').value = usingDefaultName() ? '' : (prof?.displayName || '');
-  $('nameErr').hidden = true;
-  show('name');
-  setTimeout(()=>$('nameInput').focus(), 60);
-}
-$('editName').addEventListener('click', ()=>{ audioOn(); openNamePanel(); });
-$('nameCancel').addEventListener('click', ()=> show('home'));
-
-async function saveName(){
-  const v = $('nameInput').value;
-  if(!validName(v)){
-    $('nameErr').textContent = `暱稱要 1 到 ${NAME_MAX} 個字`;
-    $('nameErr').hidden = false;
-    return;
-  }
-  $('nameSave').disabled = true;
-  try{
-    await setDisplayName(v);
-    show('home');
-  }catch(e){
-    $('nameErr').textContent = (e.message||e).toString();
-    $('nameErr').hidden = false;
-  }finally{
-    $('nameSave').disabled = false;
-  }
-}
-$('nameSave').addEventListener('click', ()=>{ audioOn(); saveName(); });
-$('nameInput').addEventListener('keydown', e=>{ if(e.key==='Enter') saveName(); });
-
 /* ============ 導覽 ============ */
 $('start').addEventListener('click', ()=>{
   audioOn();
@@ -773,6 +489,19 @@ $('start').addEventListener('click', ()=>{
     beginCalibration();
   });
 });
+/* 校正找不到人時的出路：換一顆鏡頭再試。
+   同時重置計時，讓提示從頭開始而不是立刻又跳「還是找不到你」。 */
+$('flipCam').addEventListener('click', async ()=>{
+  cfg.front = !cfg.front;
+  $('swCam').setAttribute('aria-checked', cfg.front);
+  updateCamSummary();
+  $('flipCam').hidden = true;
+  $('flipCam').textContent = cfg.front ? '換成後鏡頭' : '換成前鏡頭';
+  $('subSay').textContent = '上半身進入畫面';
+  resetCalibSearch();
+  await openCamera(cfg, video, skel);
+});
+
 $('cancelSetup').addEventListener('click',()=>{
   if(S.phase==='idle' && calibReturn!=='versus'){ beginCalibration(); return; }  // 「重新校正」
   S.phase = 'idle'; clearInterval(cdTimer);

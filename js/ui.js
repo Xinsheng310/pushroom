@@ -3,6 +3,8 @@
    規格第 8 節：顯示任何使用者輸入的文字一律用 textContent，禁止 innerHTML。
    這裡所有清單都用建 DOM 的方式產生，不留 innerHTML 的路徑給未來誤用。 */
 
+import { clearTransientErr } from './log.js';
+
 export const $ = id => document.getElementById(id);
 
 export const panels = {
@@ -27,6 +29,8 @@ export const show = name =>{
   lastShown = name;
   /* 切畫面時自動管理掃描線，避免忘記關而讓它跟進計數畫面 */
   setScan(SCAN_PANELS.has(name) ? 'on' : 'off');
+  /* 非致命的錯誤不該跟著使用者跨畫面，尤其不該出現在結算的勝利瞬間 */
+  if(changed) clearTransientErr();
   Object.entries(panels).forEach(([k,el])=>{
     const on = k===name;
     el.classList.toggle('on', on);

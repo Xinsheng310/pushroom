@@ -8,12 +8,12 @@
    落後幾下、追上了沒，這個緊張感勝過任何特效。 */
 
 import { log, showErr } from './log.js';
-import { $, show, fmt, showCountdown, clearCountdown, flash, rollNumber, replay } from './ui.js';
+import { $, show, showCountdown, clearCountdown, flash, rollNumber, replay } from './ui.js';
 import { sfx, audioOn } from './audio.js';
 import {
   createRoom, joinRoom, leaveRoom, onRoomChange, startMatch, setState, setReady,
-  setCalibMode, pushReps, writeResult, opponentGrace, getCode, getRole, isHost, inRoom,
-  installVisibilityHandler, reapIfDead, HOST,
+  setCalibMode, pushReps, writeResult, opponentGrace, getCode, isHost, inRoom,
+  installVisibilityHandler, reapIfDead,
 } from './room.js';
 import { MODES, DEFAULT_MODE, modeLabel, modeHint, thresholdsFor } from './calibmode.js';
 import { normalizeCode, isValidCode, codeFromUrl } from './roomcode.js';
@@ -98,7 +98,7 @@ export function initLobbyUI(){
     const next = order[(order.indexOf(currentMode)+1) % order.length];
     const th = next==='hostth' ? hooks.getMyThresholds?.() : null;
     try{ await setCalibMode(next, th); }
-    catch(e){ showErr('改不了模式：'+(e.message||e)); }
+    catch(e){ showErr('改不了判定標準，網路可能不穩。再按一次試試。'); }
   });
 
   /* 等待室內自行校正 —— 雙方都能按，各自校正自己的基準 */
@@ -165,7 +165,7 @@ export function initLobbyUI(){
       await setReady(next);
       myReady = next;
     }catch(e){
-      showErr('狀態更新失敗：'+(e.message||e));
+      showErr('網路好像斷了，再按一次試試。');
     }finally{
       $('readyBtn').disabled = false;
     }

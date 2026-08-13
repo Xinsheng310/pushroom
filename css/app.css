@@ -468,11 +468,16 @@ body{
 #gaugeFill{position:absolute;left:0;right:0;bottom:0;height:100%;background:var(--cool);
   transform:scaleY(0);transform-origin:bottom;transition:transform .06s linear;will-change:transform;
   opacity:.85}
-/* 門檻標記：下壓門檻（橘、較粗）與回頂門檻（白細線）。
-   這兩條是「算不算一下」的判定線，是這支儀器最重要的資訊。 */
-#gauge .mark{position:absolute;left:-4px;right:-4px;height:2px;
-  background:var(--signal);box-shadow:0 0 0 1px rgba(11,15,20,.6)}
-#gauge .mark.up{height:1px;background:rgba(255,255,255,.55)}
+/* 門檻標記：下壓門檻（粗）與回頂門檻（細）。
+   這兩條是「算不算一下」的判定線，是這支儀器最重要的資訊。
+
+   刻意不用橘：計數畫面上橘已經有兩個意思 —— 「落後了」與「時間快到了」，
+   兩個都是「現在要注意」。門檻線是永遠不動的靜態刻度，
+   讓它佔用同一個顏色，等於整場比賽都有兩條線在假裝有事發生。
+   改用粗細區分：粗＝下壓門檻、細＝回頂門檻，資訊一樣清楚而且不搶注意力。 */
+#gauge .mark{position:absolute;left:-4px;right:-4px;height:3px;
+  background:rgba(255,255,255,.92);box-shadow:0 0 0 1px rgba(11,15,20,.6)}
+#gauge .mark.up{height:1px;background:rgba(255,255,255,.45)}
 #cadence{position:absolute;left:16px;bottom:calc(var(--safe-b) + 74px);display:flex;align-items:flex-end;gap:3px;height:36px}
 /* 節奏條屬「系統狀態」（記錄到的節奏）→ 用青。
    橘只保留給需要立刻注意的事。 */
@@ -529,8 +534,13 @@ body{
 .log{font-family:"Roboto Mono",monospace;font-size:10px;line-height:1.7;color:var(--dim);
   margin:0;white-space:pre-wrap;word-break:break-all;max-height:130px;overflow-y:auto}
 
+/* display 由 JS 切成 flex（見 log.js）。加關閉鈕後要橫向排列。 */
 #err{position:fixed;left:16px;right:16px;bottom:calc(var(--safe-b) + 16px);z-index:99;
-  background:var(--signal);color:#fff;padding:14px 16px;border-radius:2px;font-size:13px;line-height:1.6;display:none}
+  background:var(--signal);color:#fff;padding:12px 8px 12px 16px;border-radius:2px;
+  font-size:13px;line-height:1.6;display:none;align-items:flex-start;gap:8px}
+#err>span{flex:1 1 auto;min-width:0}
+.errclose{flex:0 0 auto;width:34px;height:34px;margin:-4px 0 0;
+  border:0;background:transparent;color:#fff;font-size:15px;opacity:.85}
 
 /* ---------- 全域按壓回饋 ----------
    使用者可能手汗、剛做完力竭。沒有按壓感會讓他不確定「我按到了嗎」
