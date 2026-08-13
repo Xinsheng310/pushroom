@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0B0F14">
+<title>REP ROOM — 伏地挺身計數器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Noto+Sans+TC:wght@400;500;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="stage">
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="skeleton"></canvas>
+  <div id="veil"></div>
+  <div id="flash"></div>
+
+  <!-- HOME -->
+  <section id="home" class="panel on">
+    <div>
+      <div class="brand">
+        <h1 class="display">REP<br>ROOM</h1>
+        <span class="mono">V0.1</span>
+      </div>
+      <p class="tag">手機放地上，鏡頭對著你。每做完一下會有聲音回饋，時間到自動結算。</p>
+    </div>
+
+    <div>
+      <div class="field">
+        <label>時間</label>
+        <div class="chips" id="durations">
+          <button class="chip" data-sec="30">0:30</button>
+          <button class="chip" data-sec="60" aria-checked="true">1:00</button>
+          <button class="chip" data-sec="120">2:00</button>
+          <button class="chip" data-sec="0">無限</button>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:20px">
+        <div class="toggle">
+          <span>前鏡頭<small>手機放頭部下方時用前鏡頭；放身側拍全身用後鏡頭</small></span>
+          <button class="sw" id="swCam" aria-checked="true"></button>
+        </div>
+        <div class="toggle">
+          <span>顯示骨架<small>確認鏡頭有抓到你，會稍微耗電</small></span>
+          <button class="sw" id="swSkel" aria-checked="true"></button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <button class="cta" id="start" disabled>載入模型中…</button>
+      <button class="ghost" id="labBtn" style="width:100%;margin-top:8px;padding:16px">測試模式</button>
+      <p class="note" id="homeNote">需要相機權限。按下開始後會做 <b>兩次校正</b>：先撐直手臂，再下到最低點，之後才開始計時。</p>
+    </div>
+  </section>
+
+  <!-- SETUP -->
+  <section id="setup" class="panel">
+    <div id="setupBody">
+      <div class="step mono" id="stepLabel">STEP 1 / 3</div>
+      <div class="say" id="say">正在找你…</div>
+      <svg class="ring" viewBox="0 0 120 120" id="ring" style="visibility:hidden">
+        <circle class="bg" cx="60" cy="60" r="52"></circle>
+        <circle class="fg" cx="60" cy="60" r="52" stroke-dasharray="327" stroke-dashoffset="327"></circle>
+      </svg>
+      <p class="sub" id="subSay">讓上半身進入畫面，保持不動</p>
+      <button class="ghost" id="forceUse" style="display:none;border-color:var(--signal);color:var(--signal)">仍然使用最佳訊號</button>
+      <button class="ghost" id="cancelSetup">取消</button>
+    </div>
+  </section>
+
+  <!-- RUN -->
+  <section id="run" class="panel">
+    <div id="hud">
+      <div id="clock" class="display">1:00</div>
+      <div class="meta mono">
+        <div id="metaSignal">—</div>
+        <div id="metaBest">BEST —</div>
+      </div>
+    </div>
+    <div id="count">0</div>
+    <div id="gauge"><div id="gaugeFill"></div><div class="mark" id="markDown"></div></div>
+    <div id="cadence"></div>
+    <div id="status">下到底 → 撐起來，一下算一次</div>
+    <button id="abort">✕</button>
+  </section>
+
+  <!-- RESULT -->
+  <section id="result" class="panel">
+    <div style="text-align:center">
+      <div class="cap mono">TOTAL REPS</div>
+      <div class="big" id="rTotal">0</div>
+    </div>
+    <div class="stats">
+      <div><b id="rTime">—</b><small>時間</small></div>
+      <div><b id="rPace">—</b><small>秒 / 下</small></div>
+      <div><b id="rFast">—</b><small>最快一下</small></div>
+    </div>
+    <canvas id="chart"></canvas>
+    <div class="row">
+      <button class="ghost" id="again" style="flex:1;padding:18px">再來一次</button>
+      <button class="cta" id="home2" style="flex:1;font-size:18px;padding:18px">回首頁</button>
+    </div>
+  </section>
+
+  <!-- LAB / TEST MODE -->
+  <section id="lab" class="panel">
+    <div class="labwrap">
+      <div class="labhead">
+        <div>
+          <div class="step mono">TEST MODE</div>
+          <div style="font-size:17px;font-weight:700;margin-top:2px">自己測</div>
+        </div>
+        <button class="ghost" id="labExit" style="padding:10px 16px">關閉</button>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">系統檢查</div>
+        <ul class="checks" id="checks"></ul>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">即時訊號</div>
+        <table class="sig" id="sigTable"><tbody></tbody></table>
+        <p class="hint">四個候選訊號的即時數值。校正時程式會挑「上下差距最大、抖動最小」的那個來計數。<span id="fpsNow" class="mono"></span></p>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">計數測試</div>
+        <div class="labcount">
+          <div class="display" id="labCount">0</div>
+          <div>
+            <div class="mono" id="labState">尚未校正</div>
+            <div class="bar"><div id="labBar"></div><i id="labDown"></i><i id="labUp"></i></div>
+            <div class="mono" id="labDepth" style="color:var(--dim);font-size:11px">depth —</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="ghost" id="labCalib" style="flex:1;padding:13px">開始校正</button>
+          <button class="ghost" id="labReset" style="flex:0 0 auto;padding:13px 16px">歸零</button>
+        </div>
+        <label class="slide">下壓門檻 <b class="mono" id="vDown">0.72</b>
+          <input type="range" id="thDown" min="0.4" max="0.95" step="0.01" value="0.72"></label>
+        <label class="slide">回頂門檻 <b class="mono" id="vUp">0.32</b>
+          <input type="range" id="thUp" min="0.05" max="0.6" step="0.01" value="0.32"></label>
+        <p class="hint">如果做半程也被算到，把下壓門檻調高；如果做到底沒被算到，調低。</p>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">音效</div>
+        <div class="row" style="flex-wrap:wrap">
+          <button class="ghost mini" data-sfx="bottom">到底</button>
+          <button class="ghost mini" data-sfx="rep">完成一下</button>
+          <button class="ghost mini" data-sfx="tick">倒數</button>
+          <button class="ghost mini" data-sfx="go">開始</button>
+          <button class="ghost mini" data-sfx="end">結束</button>
+        </div>
+        <p class="hint">聽不到？先確認手機沒開靜音（iPhone 側邊實體開關會靜音網頁音訊）。</p>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">紀錄</div>
+        <pre class="log" id="log">—</pre>
+      </div>
+    </div>
+  </section>
+
+  <div id="err"></div>
+</div>
+
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

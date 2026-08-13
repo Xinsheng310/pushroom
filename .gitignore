@@ -1,0 +1,26 @@
+# 憑證 — 絕對不可進版本庫
+.env
+.env.*
+!.env.example
+*serviceAccount*.json
+*service-account*.json
+*-firebase-adminsdk-*.json
+.firebaserc
+firebase-debug.log
+.firebase/
+
+# 本機 https 測試憑證
+*.pem
+*.key
+*.crt
+certs/
+
+# 作業系統 / 編輯器
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# 依賴（本專案不用打包工具，但預防誤裝）
+node_modules/

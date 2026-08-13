@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0B0F14">
+<title>REP ROOM — 伏地挺身計數器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Noto+Sans+TC:wght@400;500;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B0F14;
+    --ink2:#141B23;
+    --line:rgba(255,255,255,.13);
+    --fg:#EEF3F8;
+    --dim:#8794A3;
+    --signal:#FF5A1F;
+    --cool:#35E0D4;
+    --safe-t:env(safe-area-inset-top,0px);
+    --safe-b:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--ink);color:var(--fg);
+    font-family:"Noto Sans TC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    overflow:hidden;overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;
+  }
+  .display{font-family:Anton,"Noto Sans TC",sans-serif;font-weight:400;letter-spacing:.01em}
+  .mono{font-family:"Roboto Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+  /* ---------- stage ---------- */
+  #stage{position:fixed;inset:0;overflow:hidden;background:#000}
+  #cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+  #cam.mirror{transform:scaleX(-1)}
+  #skeleton{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  #skeleton.mirror{transform:scaleX(-1)}
+  #veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,15,20,.72),rgba(11,15,20,.35) 40%,rgba(11,15,20,.82));pointer-events:none}
+  #flash{position:absolute;inset:0;background:var(--signal);opacity:0;pointer-events:none;mix-blend-mode:screen}
+
+  .panel{position:absolute;inset:0;display:none;flex-direction:column;
+    padding:calc(var(--safe-t) + 22px) 22px calc(var(--safe-b) + 22px)}
+  .panel.on{display:flex}
+
+  /* ---------- home ---------- */
+  #home{background:
+    radial-gradient(120% 80% at 50% -10%, #1C2733 0%, var(--ink) 60%);
+    justify-content:space-between}
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand h1{font-size:clamp(38px,13vw,64px);line-height:.86;margin:0}
+  .brand span{color:var(--signal);font-size:12px;letter-spacing:.22em}
+  .tag{color:var(--dim);font-size:13px;line-height:1.7;margin-top:14px;max-width:30ch}
+  .field{margin-top:26px}
+  .field>label{display:block;font-size:11px;letter-spacing:.2em;color:var(--dim);margin-bottom:10px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{flex:1 1 0;min-width:64px;padding:14px 4px;border:1px solid var(--line);border-radius:2px;
+    background:transparent;color:var(--fg);font-family:"Roboto Mono",monospace;font-size:15px;
+    transition:background .15s,border-color .15s}
+  .chip[aria-checked="true"]{background:var(--fg);color:var(--ink);border-color:var(--fg)}
+  .toggle{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:15px 0;border-top:1px solid var(--line)}
+  .toggle:last-of-type{border-bottom:1px solid var(--line)}
+  .toggle span{font-size:14px}
+  .toggle small{display:block;color:var(--dim);font-size:11px;margin-top:3px}
+  .sw{width:50px;height:28px;border-radius:99px;border:1px solid var(--line);background:transparent;position:relative;flex:0 0 auto}
+  .sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:99px;background:var(--dim);transition:.18s}
+  .sw[aria-checked="true"]{background:rgba(53,224,212,.16);border-color:var(--cool)}
+  .sw[aria-checked="true"]::after{left:25px;background:var(--cool)}
+  .cta{width:100%;padding:20px;border:0;border-radius:2px;background:var(--signal);color:#fff;
+    font-family:Anton,sans-serif;font-size:24px;letter-spacing:.08em}
+  .cta:disabled{background:var(--ink2);color:var(--dim)}
+  .note{color:var(--dim);font-size:11px;line-height:1.6;margin-top:12px}
+  .note b{color:var(--cool);font-weight:500}
+
+  /* ---------- setup / calibration ---------- */
+  #setup{justify-content:flex-end;text-align:center}
+  #setupBody{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:18px}
+  .step{font-size:11px;letter-spacing:.2em;color:var(--cool)}
+  .say{font-size:clamp(22px,7vw,32px);line-height:1.3;font-weight:700;max-width:16ch;
+    text-shadow:0 2px 24px rgba(0,0,0,.9)}
+  .sub{color:var(--dim);font-size:13px;max-width:26ch;line-height:1.7}
+  .ring{width:120px;height:120px}
+  .ring circle{fill:none;stroke-width:5}
+  .ring .bg{stroke:rgba(255,255,255,.14)}
+  .ring .fg{stroke:var(--cool);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .1s linear}
+  .ghost{padding:14px 24px;border:1px solid var(--line);background:rgba(11,15,20,.6);color:var(--fg);border-radius:2px;font-size:14px}
+  .scores{width:100%;max-width:300px;border-collapse:collapse;font-size:12px;margin:4px 0 10px}
+  .scores td{padding:5px 0;border-bottom:1px solid rgba(255,255,255,.08);text-align:left}
+  .scores td:last-child{text-align:right;font-family:"Roboto Mono",monospace}
+  .scores tr.win td{color:var(--cool)}
+  .scores tr.win td:last-child::after{content:" ✓"}
+
+  /* ---------- run ---------- */
+  #run{padding:0}
+  #count{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+    text-align:center;font-family:Anton,sans-serif;font-size:44vh;line-height:.8;
+    color:#fff;mix-blend-mode:difference;pointer-events:none}
+  #hud{position:absolute;top:calc(var(--safe-t) + 14px);left:16px;right:16px;
+    display:flex;justify-content:space-between;align-items:flex-start}
+  #clock{font-family:Anton,sans-serif;font-size:46px;line-height:1;letter-spacing:.02em}
+  #clock.warn{color:var(--signal)}
+  #hud .meta{text-align:right;font-size:11px;letter-spacing:.14em;color:var(--dim);line-height:1.9}
+  #gauge{position:absolute;right:16px;top:26%;bottom:26%;width:8px;border:1px solid var(--line);border-radius:99px;overflow:hidden}
+  #gaugeFill{position:absolute;left:0;right:0;bottom:0;height:0%;background:var(--cool);transition:height .06s linear}
+  #gauge .mark{position:absolute;left:-5px;right:-5px;height:1px;background:rgba(255,255,255,.4)}
+  #cadence{position:absolute;left:16px;bottom:calc(var(--safe-b) + 74px);display:flex;align-items:flex-end;gap:3px;height:36px}
+  .tick{width:4px;background:var(--signal);opacity:.85;border-radius:1px}
+  #status{position:absolute;left:0;right:0;bottom:calc(var(--safe-b) + 22px);text-align:center;
+    font-size:12px;letter-spacing:.16em;color:var(--dim)}
+  #abort{position:absolute;right:14px;bottom:calc(var(--safe-b) + 14px);width:40px;height:40px;border-radius:99px;
+    border:1px solid var(--line);background:rgba(11,15,20,.55);color:var(--dim);font-size:16px}
+
+  /* ---------- result ---------- */
+  #result{background:radial-gradient(120% 80% at 50% 0%, #1C2733 0%, var(--ink) 60%);justify-content:center;gap:4px}
+  #result .big{font-family:Anton,sans-serif;font-size:34vh;line-height:.78;color:var(--signal)}
+  #result .cap{font-size:11px;letter-spacing:.24em;color:var(--dim)}
+  .stats{display:flex;gap:1px;background:var(--line);border:1px solid var(--line);margin:26px 0}
+  .stats div{flex:1;background:var(--ink);padding:14px 8px;text-align:center}
+  .stats b{display:block;font-family:"Roboto Mono",monospace;font-size:19px;font-weight:700}
+  .stats small{color:var(--dim);font-size:10px;letter-spacing:.1em}
+  #chart{width:100%;height:56px;display:block;margin-bottom:22px}
+  .row{display:flex;gap:8px}
+
+  /* ---------- lab ---------- */
+  #lab{padding:0;background:rgba(11,15,20,.9);backdrop-filter:blur(14px)}
+  .labwrap{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:calc(var(--safe-t) + 16px) 16px calc(var(--safe-b) + 28px)}
+  .labhead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+  .card{border:1px solid var(--line);padding:14px;margin-bottom:10px;background:rgba(20,27,35,.72)}
+  .cardtitle{font-size:10px;letter-spacing:.2em;color:var(--cool);margin-bottom:10px}
+  .hint{color:var(--dim);font-size:11px;line-height:1.65;margin:10px 0 0}
+  .checks{list-style:none;margin:0;padding:0;font-size:13px}
+  .checks li{display:flex;gap:9px;align-items:flex-start;padding:5px 0;line-height:1.5}
+  .checks li::before{content:"…";width:15px;flex:0 0 auto;text-align:center;color:var(--dim)}
+  .checks li.ok::before{content:"●";color:var(--cool)}
+  .checks li.bad::before{content:"▲";color:var(--signal)}
+  .checks small{display:block;color:var(--dim);font-size:11px}
+  .sig{width:100%;border-collapse:collapse;font-size:13px}
+  .sig td{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.07)}
+  .sig td:last-child{text-align:right;font-family:"Roboto Mono",monospace;color:var(--cool)}
+  .sig tr.off td:last-child{color:var(--dim)}
+  .sig tr.pick td:first-child::after{content:" ← 使用中";color:var(--signal);font-size:10px}
+  .labcount{display:flex;gap:14px;align-items:center}
+  #labCount{font-size:56px;line-height:.85;min-width:2.1ch;text-align:center}
+  .labcount>div:last-child{flex:1}
+  .labcount .mono{font-size:12px;margin-bottom:6px}
+  .bar{position:relative;height:12px;border:1px solid var(--line);border-radius:2px;overflow:hidden;margin-bottom:5px}
+  .bar>div{height:100%;width:0%;background:var(--cool);transition:width .06s linear}
+  .bar>i{position:absolute;top:0;bottom:0;width:2px;background:var(--signal)}
+  .slide{display:block;font-size:12px;color:var(--dim);margin-top:12px}
+  .slide b{color:var(--fg);float:right}
+  .slide input{width:100%;margin-top:7px;accent-color:var(--cool)}
+  .mini{padding:9px 13px;font-size:12px}
+  .log{font-family:"Roboto Mono",monospace;font-size:10px;line-height:1.7;color:var(--dim);
+    margin:0;white-space:pre-wrap;word-break:break-all;max-height:130px;overflow-y:auto}
+
+  #err{position:fixed;left:16px;right:16px;bottom:calc(var(--safe-b) + 16px);z-index:99;
+    background:var(--signal);color:#fff;padding:14px 16px;border-radius:2px;font-size:13px;line-height:1.6;display:none}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="skeleton"></canvas>
+  <div id="veil"></div>
+  <div id="flash"></div>
+
+  <!-- HOME -->
+  <section id="home" class="panel on">
+    <div>
+      <div class="brand">
+        <h1 class="display">REP<br>ROOM</h1>
+        <span class="mono">V0.1</span>
+      </div>
+      <p class="tag">手機放地上，鏡頭對著你。每做完一下會有聲音回饋，時間到自動結算。</p>
+    </div>
+
+    <div>
+      <div class="field">
+        <label>時間</label>
+        <div class="chips" id="durations">
+          <button class="chip" data-sec="30">0:30</button>
+          <button class="chip" data-sec="60" aria-checked="true">1:00</button>
+          <button class="chip" data-sec="120">2:00</button>
+          <button class="chip" data-sec="0">無限</button>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:20px">
+        <div class="toggle">
+          <span>前鏡頭<small>手機放頭部下方時用前鏡頭；放身側拍全身用後鏡頭</small></span>
+          <button class="sw" id="swCam" aria-checked="true"></button>
+        </div>
+        <div class="toggle">
+          <span>顯示骨架<small>確認鏡頭有抓到你，會稍微耗電</small></span>
+          <button class="sw" id="swSkel" aria-checked="true"></button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <button class="cta" id="start" disabled>載入模型中…</button>
+      <button class="ghost" id="labBtn" style="width:100%;margin-top:8px;padding:16px">測試模式</button>
+      <p class="note" id="homeNote">需要相機權限。按下開始後會做 <b>兩次校正</b>：先撐直手臂，再下到最低點，之後才開始計時。</p>
+    </div>
+  </section>
+
+  <!-- SETUP -->
+  <section id="setup" class="panel">
+    <div id="setupBody">
+      <div class="step mono" id="stepLabel">STEP 1 / 3</div>
+      <div class="say" id="say">正在找你…</div>
+      <svg class="ring" viewBox="0 0 120 120" id="ring" style="visibility:hidden">
+        <circle class="bg" cx="60" cy="60" r="52"></circle>
+        <circle class="fg" cx="60" cy="60" r="52" stroke-dasharray="327" stroke-dashoffset="327"></circle>
+      </svg>
+      <p class="sub" id="subSay">讓上半身進入畫面，保持不動</p>
+      <button class="ghost" id="forceUse" style="display:none;border-color:var(--signal);color:var(--signal)">仍然使用最佳訊號</button>
+      <button class="ghost" id="cancelSetup">取消</button>
+    </div>
+  </section>
+
+  <!-- RUN -->
+  <section id="run" class="panel">
+    <div id="hud">
+      <div id="clock" class="display">1:00</div>
+      <div class="meta mono">
+        <div id="metaSignal">—</div>
+        <div id="metaBest">BEST —</div>
+      </div>
+    </div>
+    <div id="count">0</div>
+    <div id="gauge"><div id="gaugeFill"></div><div class="mark" id="markDown"></div></div>
+    <div id="cadence"></div>
+    <div id="status">下到底 → 撐起來，一下算一次</div>
+    <button id="abort">✕</button>
+  </section>
+
+  <!-- RESULT -->
+  <section id="result" class="panel">
+    <div style="text-align:center">
+      <div class="cap mono">TOTAL REPS</div>
+      <div class="big" id="rTotal">0</div>
+    </div>
+    <div class="stats">
+      <div><b id="rTime">—</b><small>時間</small></div>
+      <div><b id="rPace">—</b><small>秒 / 下</small></div>
+      <div><b id="rFast">—</b><small>最快一下</small></div>
+    </div>
+    <canvas id="chart"></canvas>
+    <div class="row">
+      <button class="ghost" id="again" style="flex:1;padding:18px">再來一次</button>
+      <button class="cta" id="home2" style="flex:1;font-size:18px;padding:18px">回首頁</button>
+    </div>
+  </section>
+
+  <!-- LAB / TEST MODE -->
+  <section id="lab" class="panel">
+    <div class="labwrap">
+      <div class="labhead">
+        <div>
+          <div class="step mono">TEST MODE</div>
+          <div style="font-size:17px;font-weight:700;margin-top:2px">自己測</div>
+        </div>
+        <button class="ghost" id="labExit" style="padding:10px 16px">關閉</button>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">系統檢查</div>
+        <ul class="checks" id="checks"></ul>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">即時訊號</div>
+        <table class="sig" id="sigTable"><tbody></tbody></table>
+        <p class="hint">四個候選訊號的即時數值。校正時程式會挑「上下差距最大、抖動最小」的那個來計數。<span id="fpsNow" class="mono"></span></p>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">計數測試</div>
+        <div class="labcount">
+          <div class="display" id="labCount">0</div>
+          <div>
+            <div class="mono" id="labState">尚未校正</div>
+            <div class="bar"><div id="labBar"></div><i id="labDown"></i><i id="labUp"></i></div>
+            <div class="mono" id="labDepth" style="color:var(--dim);font-size:11px">depth —</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="ghost" id="labCalib" style="flex:1;padding:13px">開始校正</button>
+          <button class="ghost" id="labReset" style="flex:0 0 auto;padding:13px 16px">歸零</button>
+        </div>
+        <label class="slide">下壓門檻 <b class="mono" id="vDown">0.72</b>
+          <input type="range" id="thDown" min="0.4" max="0.95" step="0.01" value="0.72"></label>
+        <label class="slide">回頂門檻 <b class="mono" id="vUp">0.32</b>
+          <input type="range" id="thUp" min="0.05" max="0.6" step="0.01" value="0.32"></label>
+        <p class="hint">如果做半程也被算到，把下壓門檻調高；如果做到底沒被算到，調低。</p>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">音效</div>
+        <div class="row" style="flex-wrap:wrap">
+          <button class="ghost mini" data-sfx="bottom">到底</button>
+          <button class="ghost mini" data-sfx="rep">完成一下</button>
+          <button class="ghost mini" data-sfx="tick">倒數</button>
+          <button class="ghost mini" data-sfx="go">開始</button>
+          <button class="ghost mini" data-sfx="end">結束</button>
+        </div>
+        <p class="hint">聽不到？先確認手機沒開靜音（iPhone 側邊實體開關會靜音網頁音訊）。</p>
+      </div>
+
+      <div class="card">
+        <div class="cardtitle mono">紀錄</div>
+        <pre class="log" id="log">—</pre>
+      </div>
+    </div>
+  </section>
+
+  <div id="err"></div>
+</div>
+
+<script type="module">
+/* 手機沒有 console，所以任何錯誤都直接印在畫面上 */
+const LOG=[];
+function log(m){ LOG.push(new Date().toTimeString().slice(0,8)+'  '+m); if(LOG.length>60) LOG.shift();
+  const el=document.getElementById('log'); if(el){ el.textContent=LOG.join('\n'); el.scrollTop=el.scrollHeight; } }
+addEventListener('error', e=>{ log('ERR '+(e.message||e.type)); showErr('JS 錯誤：'+e.message); });
+addEventListener('unhandledrejection', e=>{ log('REJECT '+(e.reason?.message||e.reason)); });
+function showErr(msg){ const b=document.getElementById('err'); b.textContent=msg; b.style.display='block'; }
+
+/* ============ elements ============ */
+const $ = id => document.getElementById(id);
+const video=$('cam'), skel=$('skeleton'), sctx=skel.getContext('2d');
+const panels={home:$('home'),setup:$('setup'),run:$('run'),result:$('result'),lab:$('lab')};
+const show = name => Object.entries(panels).forEach(([k,el])=>el.classList.toggle('on',k===name));
+const errBox=$('err');
+const fail = (msg)=>{ showErr(msg); log('相機：'+msg); };
+
+/* ============ settings ============ */
+const cfg = { seconds:60, front:true, skeleton:true };
+
+$('durations').addEventListener('click', e=>{
+  const b=e.target.closest('.chip'); if(!b) return;
+  [...$('durations').children].forEach(c=>c.setAttribute('aria-checked', c===b));
+  cfg.seconds = +b.dataset.sec;
+});
+const bindSwitch=(el,key,after)=>el.addEventListener('click',()=>{
+  cfg[key]=!cfg[key]; el.setAttribute('aria-checked',cfg[key]); after&&after();
+});
+bindSwitch($('swCam'),'front',()=>openCamera());
+bindSwitch($('swSkel'),'skeleton',()=>{ if(!cfg.skeleton) sctx.clearRect(0,0,skel.width,skel.height); });
+
+/* ============ audio (all synthesised — no asset files) ============ */
+let actx=null;
+const audioOn = ()=>{ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); };
+function tone({f=880,dur=.1,type='sine',gain=.5,slideTo=null,delay=0}){
+  if(!actx) return;
+  const t0=actx.currentTime+delay;
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type=type; o.frequency.setValueAtTime(f,t0);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo,t0+dur);
+  g.gain.setValueAtTime(0,t0);
+  g.gain.linearRampToValueAtTime(gain,t0+.008);
+  g.gain.exponentialRampToValueAtTime(.0001,t0+dur);
+  o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0+dur+.05);
+}
+const sfx = {
+  bottom: ()=>tone({f:150,dur:.09,type:'triangle',gain:.35}),
+  rep:(n)=>{ const step=[0,2,4,7,9][ (n-1)%5 ]; const f=660*Math.pow(2,step/12);
+             tone({f,dur:.13,type:'square',gain:.22}); tone({f:f*2,dur:.1,type:'sine',gain:.16}); },
+  tick: ()=>tone({f:1000,dur:.06,type:'sine',gain:.3}),
+  go:   ()=>{ tone({f:520,dur:.5,type:'sawtooth',gain:.3,slideTo:1040}); },
+  ready:()=>tone({f:1320,dur:.16,type:'sine',gain:.3}),
+  end:  ()=>{ tone({f:330,dur:.7,type:'sawtooth',gain:.3,slideTo:160});
+              tone({f:220,dur:.7,type:'square',gain:.2,delay:.05}); },
+  warn: ()=>tone({f:440,dur:.12,type:'triangle',gain:.25}),
+};
+
+/* ============ camera ============ */
+let stream=null;
+async function openCamera(){
+  try{
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('insecure');
+    stream?.getTracks().forEach(t=>t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{ facingMode: cfg.front?'user':'environment', width:{ideal:960}, height:{ideal:720}, frameRate:{ideal:30} }
+    });
+    video.srcObject=stream; await video.play();
+    video.classList.toggle('mirror',cfg.front);
+    skel.classList.toggle('mirror',cfg.front);
+    errBox.style.display='none';
+  }catch(e){
+    if(e.message==='insecure' || !window.isSecureContext)
+      fail('這個頁面不是安全來源，瀏覽器不給用相機。請用 https:// 網址開啟（或 localhost）。直接開本機檔案是不行的。');
+    else if(e.name==='NotAllowedError') fail('相機權限被拒。到瀏覽器網站設定把相機打開，再重新整理。');
+    else fail('開不了相機：'+e.name);
+  }
+}
+
+/* ============ pose model ============ */
+let landmarker=null, modelStatus='載入中';
+const CDNS=[
+  {name:"jsdelivr",      mod:"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14",
+                         wasm:"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"},
+  {name:"jsdelivr/+esm", mod:"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm",
+                         wasm:"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"},
+  {name:"unpkg",         mod:"https://unpkg.com/@mediapipe/tasks-vision@0.10.14",
+                         wasm:"https://unpkg.com/@mediapipe/tasks-vision@0.10.14/wasm"},
+];
+const MODEL="https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+
+async function loadModel(){
+  for(const cdn of CDNS){
+    try{
+      log('載入 '+cdn.name+' …');
+      // 一定要從套件根目錄 import，不能指 vision_bundle.mjs（那是 default export）
+      const raw = await import(/* @vite-ignore */ cdn.mod);
+      const ns  = (raw?.FilesetResolver ? raw : raw?.default) || {};
+      const {FilesetResolver, PoseLandmarker} = ns;
+      if(!FilesetResolver||!PoseLandmarker) throw new Error('取不到具名匯出，keys='+Object.keys(raw||{}).slice(0,6));
+      const files = await FilesetResolver.forVisionTasks(cdn.wasm);
+      log('wasm ok，載入模型權重…');
+      for(const delegate of ["GPU","CPU"]){
+        try{
+          landmarker = await PoseLandmarker.createFromOptions(files,{
+            baseOptions:{ modelAssetPath:MODEL, delegate },
+            runningMode:"VIDEO", numPoses:1,
+            minPoseDetectionConfidence:.5, minPosePresenceConfidence:.5, minTrackingConfidence:.5
+          });
+          modelStatus='已載入 · '+cdn.name+' · '+delegate;
+          log('模型就緒（'+delegate+'）');
+          $('start').disabled=false; $('start').textContent='開始';
+          return;
+        }catch(e){ log(delegate+' 失敗：'+(e.message||e).toString().slice(0,90)); }
+      }
+      throw new Error('GPU/CPU 都建立失敗');
+    }catch(e){
+      log('✗ '+cdn.name+'：'+(e.message||e).toString().slice(0,120));
+    }
+  }
+  modelStatus='載入失敗';
+  $('start').textContent='模型載入失敗';
+  showErr('姿勢模型載不下來。開「測試模式」看最下方紀錄。若是在 Claude 預覽視窗裡，沙箱會擋掉 CDN — 請下載檔案放到 https 網址再測。');
+}
+loadModel();
+
+/* ============ signal extraction ============ */
+const L={NOSE:0,LEYE:2,REYE:5,LEAR:7,REAR:8,LSHO:11,RSHO:12,LELB:13,RELB:14,LWRI:15,RWRI:16};
+let AR=1; // aspect correction
+const vis=(lm,i)=>(lm[i]?.visibility??0);
+const dist=(lm,a,b)=>Math.hypot((lm[a].x-lm[b].x)*AR, lm[a].y-lm[b].y);
+function angle(lm,a,b,c){
+  const ux=(lm[a].x-lm[b].x)*AR, uy=lm[a].y-lm[b].y;
+  const vx=(lm[c].x-lm[b].x)*AR, vy=lm[c].y-lm[b].y;
+  const d=(ux*vx+uy*vy)/(Math.hypot(ux,uy)*Math.hypot(vx,vy)+1e-9);
+  return Math.acos(Math.max(-1,Math.min(1,d)))*180/Math.PI;
+}
+// four candidate signals; calibration picks whichever separates up/down best
+const SIGNALS = {
+  elbow:{ label:'手肘角度', get(lm){
+    const ok=i=>vis(lm,i)>.5; let s=0,n=0;
+    if(ok(L.LSHO)&&ok(L.LELB)&&ok(L.LWRI)){ s+=angle(lm,L.LSHO,L.LELB,L.LWRI); n++; }
+    if(ok(L.RSHO)&&ok(L.RELB)&&ok(L.RWRI)){ s+=angle(lm,L.RSHO,L.RELB,L.RWRI); n++; }
+    return n? s/n : null; } },
+  eyes:{ label:'臉部距離', get(lm){
+    return (vis(lm,L.LEYE)>.5&&vis(lm,L.REYE)>.5)? dist(lm,L.LEYE,L.REYE)*100 : null; } },
+  shoulders:{ label:'肩寬', get(lm){
+    return (vis(lm,L.LSHO)>.5&&vis(lm,L.RSHO)>.5)? dist(lm,L.LSHO,L.RSHO)*100 : null; } },
+  height:{ label:'肩膀高度', get(lm){
+    return (vis(lm,L.LSHO)>.5&&vis(lm,L.RSHO)>.5)? (lm[L.LSHO].y+lm[L.RSHO].y)/2*100 : null; } },
+};
+const bodyFound = lm => lm && (vis(lm,L.LSHO)>.5||vis(lm,L.RSHO)>.5||vis(lm,L.NOSE)>.6);
+
+/* ============ state machine ============ */
+const TH={down:.72, up:.32};
+const MIN_REP_MS=380, MIN_HOLD_MS=140;
+const S={
+  phase:'idle',            // idle | calib | countdown | run | done
+  key:null, up:0, down:0,  // chosen signal + baselines
+  ema:null, depth:0,
+  repState:'up', lastEdge:0, reps:0, times:[], startAt:0, endAt:0,
+};
+const CONNS=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
+
+/* ============ main loop ============ */
+let lastTs=-1, raf=null;
+function loop(){
+  raf=requestAnimationFrame(loop);
+  if(!landmarker || video.readyState<2) return;
+  const ts=performance.now();
+  if(ts===lastTs) return; lastTs=ts;
+
+  let res; try{ res=landmarker.detectForVideo(video,ts); }catch(e){ return; }
+  const lm=res?.landmarks?.[0];
+  AR = video.videoWidth/video.videoHeight || 1;
+
+  if(cfg.skeleton) drawSkeleton(lm); else if(skel.width) sctx.clearRect(0,0,skel.width,skel.height);
+
+  if(!lm) { onFrame(null,ts); return; }
+  onFrame(lm,ts);
+}
+
+function drawSkeleton(lm){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  const cw=skel.clientWidth, ch=skel.clientHeight;
+  if(skel.width!==cw*dpr){ skel.width=cw*dpr; skel.height=ch*dpr; }
+  sctx.setTransform(dpr,0,0,dpr,0,0);
+  sctx.clearRect(0,0,cw,ch);
+  if(!lm) return;
+  const vw=video.videoWidth,vh=video.videoHeight; if(!vw) return;
+  const k=Math.max(cw/vw,ch/vh), dx=(cw-vw*k)/2, dy=(ch-vh*k)/2;
+  const P=i=>[dx+lm[i].x*vw*k, dy+lm[i].y*vh*k];
+  sctx.strokeStyle='rgba(53,224,212,.55)'; sctx.lineWidth=2.5; sctx.lineCap='round';
+  sctx.beginPath();
+  for(const [a,b] of CONNS){ if(vis(lm,a)>.5&&vis(lm,b)>.5){ const A=P(a),B=P(b); sctx.moveTo(A[0],A[1]); sctx.lineTo(B[0],B[1]); } }
+  sctx.stroke();
+  sctx.fillStyle='rgba(255,255,255,.85)';
+  for(const i of [0,11,12,13,14,15,16]) if(vis(lm,i)>.5){ const [x,y]=P(i); sctx.beginPath(); sctx.arc(x,y,3.5,0,7); sctx.fill(); }
+}
+
+/* ============ calibration ============ */
+const SETTLE_MS=2200, HOLD_MS=1800;
+let calib={step:0, t0:0, samples:{}, seenAt:0, holding:false};
+let calibReturn='run';
+const ring=$('ring').querySelector('.fg');
+const setRing=p=>{ ring.style.strokeDashoffset = 327*(1-p); };
+
+function beginCalibration(){
+  S.phase='calib'; calib={step:0,t0:0,samples:{},seenAt:0,holding:false};
+  $('ring').style.visibility='hidden';
+  $('forceUse').style.display='none';
+  $('cancelSetup').textContent='取消';
+  $('stepLabel').textContent='STEP 1 / 3';
+  $('say').textContent='正在找你…';
+  $('subSay').textContent='讓上半身進入畫面';
+  show('setup');
+}
+function calibPrompt(step){
+  $('ring').style.visibility='visible';
+  calib.holding=false;
+  ring.style.stroke='rgba(255,255,255,.28)';
+  setRing(0);
+  if(step===1){ $('stepLabel').textContent='STEP 2 / 3'; $('say').textContent='撐直手臂'; }
+  if(step===2){ $('stepLabel').textContent='STEP 3 / 3'; $('say').textContent='下到最低點'; }
+  $('subSay').textContent='擺好姿勢…';
+  sfx.ready();
+}
+function collect(lm,ts){
+  const bucket = calib.samples[calib.step] ||= {};
+  for(const k in SIGNALS){ const v=SIGNALS[k].get(lm); if(v!=null) (bucket[k] ||= []).push(v); }
+}
+/* 中位數 + MAD，比平均/標準差耐得住偶發的關節點跳動 */
+function robust(a){
+  if(!a || a.length<10) return null;
+  const s=[...a].sort((x,y)=>x-y);
+  const med=s[(s.length>>1)];
+  const dev=s.map(v=>Math.abs(v-med)).sort((x,y)=>x-y);
+  return {m:med, sd:dev[(dev.length>>1)]*1.4826};
+}
+
+const PASS=2.0;
+function finishCalibration(){
+  const report=[];
+  let best=null;
+  for(const k in SIGNALS){
+    const u=robust(calib.samples[1]?.[k]), d=robust(calib.samples[2]?.[k]);
+    if(!u||!d){ report.push({k,score:null}); continue; }
+    const score = Math.abs(u.m-d.m) / (u.sd+d.sd+1e-3);
+    report.push({k,score,u:u.m,d:d.m});
+    if(!best || score>best.score) best={key:k,up:u.m,down:d.m,score};
+  }
+  log('校正結果 '+report.map(r=>r.k+'='+(r.score==null?'無資料':r.score.toFixed(1))).join('  '));
+
+  if(best && best.score>=PASS){ applyCalib(best); return; }
+
+  // 沒過：把每個訊號的分數攤開來，讓使用者自己判斷，而不是只丟一句「太弱」
+  $('ring').style.visibility='hidden';
+  $('say').textContent='校正沒過';
+  $('subSay').innerHTML =
+    '<table class="scores"><tbody>' +
+    report.map(r=>`<tr class="${best&&r.k===best.key&&r.score>=PASS?'win':''}"><td>${SIGNALS[r.k].label}</td>`+
+      `<td>${r.score==null?'看不到':r.score.toFixed(1)}</td></tr>`).join('') +
+    '</tbody></table>' +
+    `分數要 ${PASS.toFixed(1)} 以上才算穩。分數低代表上下兩個姿勢在鏡頭裡差別不夠明顯，或是撐住時晃動太多。`;
+  $('forceUse').style.display = best? 'block':'none';
+  $('forceUse').onclick = ()=>{ log('使用者強制採用 '+best.key); applyCalib(best); };
+  $('cancelSetup').textContent='重新校正';
+  S.phase='idle';
+  sfx.warn();
+}
+
+function applyCalib(best){
+  S.key=best.key; S.up=best.up; S.down=best.down; S.ema=null;
+  $('metaSignal').textContent = SIGNALS[best.key].label;
+  $('forceUse').style.display='none';
+  log('採用 '+SIGNALS[best.key].label+'  上='+best.up.toFixed(1)+' 下='+best.down.toFixed(1)+' 分數='+best.score.toFixed(1));
+  if(calibReturn==='lab'){
+    S.phase='lab'; S.reps=0; S.times=[]; S.repState='up'; S.startAt=performance.now();
+    $('labCount').textContent='0'; show('lab'); return;
+  }
+  startCountdown();
+}
+
+/* ============ countdown → run ============ */
+let cdTimer=null;
+function startCountdown(){
+  S.phase='countdown';
+  $('ring').style.visibility='hidden';
+  $('stepLabel').textContent='';
+  $('subSay').textContent='回到起始姿勢';
+  let n=3;
+  const tick=()=>{
+    if(n<0){ clearInterval(cdTimer); beginRun(); return; }
+    $('say').textContent = n>0 ? String(n) : 'GO';
+    n>0 ? sfx.tick() : sfx.go();
+    n--;
+  };
+  tick(); cdTimer=setInterval(tick,1000);
+}
+
+function beginRun(){
+  S.phase='run'; S.reps=0; S.times=[]; S.repState='up'; S.lastEdge=0; S.ema=null; S.depth=0;
+  S.startAt=performance.now();
+  S.endAt = cfg.seconds? S.startAt+cfg.seconds*1000 : 0;
+  $('count').textContent='0';
+  $('cadence').innerHTML='';
+  $('clock').classList.remove('warn');
+  $('markDown').style.bottom = (TH.down*100)+'%';
+  show('run');
+  requestWakeLock();
+}
+
+let warned10=false;
+function onFrame(lm,ts){
+  fpsTick(ts);
+  if(panels.lab.classList.contains('on')) labUpdate(lm,ts);
+
+  /* ---- free test mode ---- */
+  if(S.phase==='lab'){
+    const r=track(lm,ts);
+    $('labBar').style.width=Math.min(100,S.depth*100)+'%';
+    $('labDepth').textContent = r===null? 'depth — （看不到你）' : 'depth '+S.depth.toFixed(2);
+    $('labState').textContent = r===null? '找不到身體' : (S.repState==='down'?'下壓中':'頂點');
+    if(r==='rep'){ $('labCount').textContent=S.reps; pulse(); log('計數 '+S.reps); }
+    return;
+  }
+
+  /* ---- calibration flow ---- */
+  if(S.phase==='calib'){
+    if(calib.step===0){
+      if(bodyFound(lm)){
+        if(!calib.seenAt) calib.seenAt=ts;
+        if(ts-calib.seenAt>700){ calib.step=1; calib.t0=ts; calibPrompt(1); }
+      } else calib.seenAt=0;
+      return;
+    }
+    const el=ts-calib.t0;
+    if(el < SETTLE_MS){                      // 擺姿勢，不取樣
+      setRing(el/SETTLE_MS);
+      return;
+    }
+    if(!calib.holding){                      // 開始取樣
+      calib.holding=true; sfx.tick(); setRing(0);
+      ring.style.stroke='var(--cool)';
+      $('subSay').textContent='撐住不要動';
+    }
+    const p=Math.min(1,(el-SETTLE_MS)/HOLD_MS);
+    setRing(p);
+    if(lm) collect(lm,ts);
+    if(p>=1){
+      if(calib.step===1){ calib.step=2; calib.t0=ts; calibPrompt(2); }
+      else { sfx.ready(); finishCalibration(); }
+    }
+    return;
+  }
+
+  /* ---- running ---- */
+  if(S.phase!=='run') return;
+
+  if(cfg.seconds){
+    const left=Math.max(0,S.endAt-ts);
+    $('clock').textContent=fmt(left);
+    if(left<=10000){ $('clock').classList.add('warn'); if(!warned10){ warned10=true; sfx.warn(); } }
+    if(left<=0){ finish(); return; }
+  } else {
+    $('clock').textContent=fmt(ts-S.startAt);
+  }
+
+  const r=track(lm,ts);
+  if(r===null){ $('status').textContent='看不到你 — 調整位置'; return; }
+  $('gaugeFill').style.height=Math.min(100,S.depth*100)+'%';
+  if(r==='down') $('status').textContent='撐起來';
+  if(r==='rep'){ $('count').textContent=S.reps; pulse(); addTick(); $('status').textContent='下一下'; }
+}
+
+/* 共用的深度計算 + 狀態機；回傳 'rep' | 'down' | '' | null(看不到) */
+function track(lm,ts){
+  const raw = lm && S.key ? SIGNALS[S.key].get(lm) : null;
+  if(raw==null) return null;
+  S.ema = S.ema==null? raw : S.ema*0.62 + raw*0.38;
+  let d=(S.ema-S.up)/((S.down-S.up)||1e-6);
+  S.depth = d = Math.max(0,Math.min(1.25,d));
+
+  if(S.repState==='up' && d>TH.down && ts-S.lastEdge>MIN_HOLD_MS){
+    S.repState='down'; S.lastEdge=ts; sfx.bottom(); return 'down';
+  }
+  if(S.repState==='down' && d<TH.up && ts-S.lastEdge>MIN_REP_MS){
+    S.repState='up'; S.lastEdge=ts;
+    S.reps++; S.times.push(ts-S.startAt);
+    sfx.rep(S.reps); return 'rep';
+  }
+  return '';
+}
+
+const fmt=ms=>{ const s=Math.ceil(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); };
+function pulse(){ const f=$('flash'); f.style.transition='none'; f.style.opacity='.30';
+  requestAnimationFrame(()=>{ f.style.transition='opacity .22s ease-out'; f.style.opacity='0'; }); }
+function addTick(){
+  const n=S.times.length;
+  const gap = n>1 ? S.times[n-1]-S.times[n-2] : 1500;
+  const h = Math.max(6, Math.min(36, 54000/Math.max(gap,300)));
+  const el=document.createElement('div'); el.className='tick'; el.style.height=h+'px';
+  const c=$('cadence'); c.appendChild(el); while(c.children.length>26) c.removeChild(c.firstChild);
+}
+
+/* ============ finish ============ */
+function finish(){
+  S.phase='done'; releaseWakeLock(); sfx.end();
+  const dur=(cfg.seconds? cfg.seconds*1000 : (S.times.at(-1)||0));
+  $('rTotal').textContent=S.reps;
+  $('rTime').textContent=fmt(dur);
+  $('rPace').textContent = S.reps? (dur/1000/S.reps).toFixed(2) : '—';
+  let fast='—';
+  if(S.times.length>1){
+    let m=Infinity; for(let i=1;i<S.times.length;i++) m=Math.min(m,S.times[i]-S.times[i-1]);
+    fast=(m/1000).toFixed(2)+'s';
+  }
+  $('rFast').textContent=fast;
+  drawChart(dur);
+  show('result');
+}
+function drawChart(dur){
+  const c=$('chart'), dpr=Math.min(devicePixelRatio||1,2);
+  const w=c.clientWidth, h=56; c.width=w*dpr; c.height=h*dpr;
+  const x=c.getContext('2d'); x.setTransform(dpr,0,0,dpr,0,0); x.clearRect(0,0,w,h);
+  x.strokeStyle='rgba(255,255,255,.13)'; x.beginPath(); x.moveTo(0,h-.5); x.lineTo(w,h-.5); x.stroke();
+  if(!S.times.length||!dur) return;
+  x.fillStyle='#FF5A1F';
+  S.times.forEach((t,i)=>{
+    const gap = i? t-S.times[i-1] : 1500;
+    const bh = Math.max(5, Math.min(h-4, 42000/Math.max(gap,300)));
+    x.fillRect((t/dur)*(w-3), h-bh, 3, bh);
+  });
+  x.fillStyle='rgba(255,255,255,.35)'; x.font='10px "Roboto Mono",monospace';
+  x.fillText('每根 = 一下，越高代表越快', 0, 11);
+}
+
+/* ============ wake lock ============ */
+let wl=null;
+async function requestWakeLock(){ try{ wl=await navigator.wakeLock?.request('screen'); }catch(e){} }
+function releaseWakeLock(){ try{ wl?.release(); }catch(e){} wl=null; }
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && S.phase==='run') requestWakeLock();
+});
+
+/* ============ lab / test mode ============ */
+let fps=0, fpsN=0, fpsT=0;
+function fpsTick(ts){ fpsN++; if(ts-fpsT>500){ fps=Math.round(fpsN*1000/(ts-fpsT)); fpsN=0; fpsT=ts; } }
+
+function renderChecks(){
+  const camTrack = stream?.getVideoTracks?.()[0];
+  const rows=[
+    ['安全來源 (https)', window.isSecureContext,
+      window.isSecureContext? location.origin : '目前是 '+location.protocol+'  相機不會給權限'],
+    ['相機 API', !!navigator.mediaDevices?.getUserMedia, navigator.mediaDevices?.getUserMedia? '可用':'瀏覽器不支援或非安全來源'],
+    ['相機串流', !!camTrack && camTrack.readyState==='live',
+      camTrack? (cfg.front?'前鏡頭':'後鏡頭')+'  '+video.videoWidth+'×'+video.videoHeight : '尚未取得'],
+    ['姿勢模型', !!landmarker, modelStatus],
+    ['音訊', actx?.state==='running', actx? actx.state : '尚未啟用（按任一按鈕即啟用）'],
+    ['螢幕恆亮', !!wl, wl? '已鎖定' : (navigator.wakeLock? '執行時才啟用':'此瀏覽器不支援')],
+  ];
+  $('checks').innerHTML = rows.map(([k,ok,note])=>
+    `<li class="${ok?'ok':'bad'}">${k}<small>${note}</small></li>`).join('');
+}
+
+function labUpdate(lm,ts){
+  const tb=$('sigTable').querySelector('tbody');
+  if(tb.children.length!==Object.keys(SIGNALS).length){
+    tb.innerHTML=Object.keys(SIGNALS).map(k=>`<tr data-k="${k}"><td>${SIGNALS[k].label}</td><td>—</td></tr>`).join('');
+  }
+  for(const k in SIGNALS){
+    const v = lm? SIGNALS[k].get(lm) : null;
+    const tr=tb.querySelector(`tr[data-k="${k}"]`);
+    tr.classList.toggle('off', v==null);
+    tr.classList.toggle('pick', S.key===k);
+    tr.lastElementChild.textContent = v==null? '看不到' : v.toFixed(1);
+  }
+  $('fpsNow').textContent = ' · '+fps+' fps';
+  if(ts-(labUpdate.t||0)>800){ labUpdate.t=ts; renderChecks(); }
+}
+
+$('labBtn').addEventListener('click', async ()=>{
+  audioOn();
+  if(!stream) await openCamera();
+  renderChecks(); log('進入測試模式');
+  if(S.key) S.phase='lab';
+  show('lab');
+});
+$('labExit').addEventListener('click',()=>{ S.phase='idle'; show('home'); });
+$('labCalib').addEventListener('click',()=>{
+  audioOn(); calibReturn='lab'; beginCalibration();
+});
+$('labReset').addEventListener('click',()=>{
+  S.reps=0; S.times=[]; S.repState='up'; S.ema=null; $('labCount').textContent='0'; log('計數歸零');
+});
+const bindTh=(id,lbl,key)=>$(id).addEventListener('input',e=>{
+  TH[key]=+e.target.value; $(lbl).textContent=TH[key].toFixed(2);
+  if(key==='down') $('markDown').style.bottom=(TH.down*100)+'%';
+});
+bindTh('thDown','vDown','down'); bindTh('thUp','vUp','up');
+const placeMarks=()=>{ $('labDown').style.left=(TH.down*100)+'%'; $('labUp').style.left=(TH.up*100)+'%'; };
+$('thDown').addEventListener('input',placeMarks); $('thUp').addEventListener('input',placeMarks); placeMarks();
+document.querySelectorAll('[data-sfx]').forEach(b=>b.addEventListener('click',()=>{
+  audioOn(); const k=b.dataset.sfx; k==='rep'? sfx.rep(1) : sfx[k]();
+}));
+
+/* ============ nav ============ */
+$('start').addEventListener('click', async ()=>{
+  audioOn();
+  if(!stream) await openCamera();
+  if(!stream) return;
+  warned10=false; calibReturn='run';
+  $('cancelSetup').textContent='取消';
+  beginCalibration();
+});
+$('cancelSetup').addEventListener('click',()=>{
+  if(S.phase==='idle'){ beginCalibration(); return; }   // "重新校正"
+  S.phase='idle'; clearInterval(cdTimer);
+  show(calibReturn==='lab'?'lab':'home');
+});
+$('abort').addEventListener('click',()=>{ if(S.phase==='run') finish(); });
+$('again').addEventListener('click',()=>{ warned10=false; startCountdown(); show('setup'); });
+$('home2').addEventListener('click',()=>{ S.phase='idle'; show('home'); });
+
+setInterval(()=>{ if(panels.lab.classList.contains('on') && !landmarker) renderChecks(); }, 1000);
+
+log('UA '+navigator.userAgent.slice(0,90));
+log('secureContext='+window.isSecureContext+'  origin='+location.origin);
+openCamera();
+loop();
+</script>
+</body>
+</html>
