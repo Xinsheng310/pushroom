@@ -12,16 +12,24 @@
 
    規格第 5 節的每條約束在下面都有對應的 test。 */
 
-import {
-  initializeTestEnvironment, assertFails, assertSucceeds,
-} from '@firebase/rules-unit-testing';
+/* 相依套件沒裝就明確說明並跳過，而不是丟一個看不懂的 import 錯誤 */
+let rut;
+try{
+  rut = await import('@firebase/rules-unit-testing');
+}catch(e){
+  console.log('略過：需要 emulator 環境。安裝方式：');
+  console.log('  npm install -g firebase-tools');
+  console.log('  npm install --no-save @firebase/rules-unit-testing firebase');
+  console.log('  firebase emulators:exec --only firestore,database "node tests/rules.emulator.test.mjs"');
+  console.log('（emulator 需要 Java）');
+  process.exit(0);
+}
+const { initializeTestEnvironment, assertFails, assertSucceeds } = rut;
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import {
-  doc, setDoc, getDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp,
-} from 'firebase/firestore';
-import { ref, set, get } from 'firebase/database';
+const { doc, setDoc, getDoc, updateDoc, deleteDoc, Timestamp } = await import('firebase/firestore');
+const { ref, set, get } = await import('firebase/database');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');

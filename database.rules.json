@@ -38,6 +38,9 @@
           },
           "$other": {
             ".validate": false
+          },
+          "leftAt": {
+            ".validate": "newData.val() == now || newData.val() == null"
           }
         },
         "guest": {
@@ -60,6 +63,9 @@
           },
           "$other": {
             ".validate": false
+          },
+          "leftAt": {
+            ".validate": "newData.val() == now || newData.val() == null"
           }
         },
         "state": {
@@ -88,6 +94,10 @@
         },
         "$other": {
           ".validate": false
+        },
+        "countdownSec": {
+          ".write": "auth != null && root.child('rooms').child($code).child('host').child('uid').val() == auth.uid",
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10"
         }
       }
     }
