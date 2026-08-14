@@ -14,7 +14,7 @@
 
    4. 換版時清掉舊快取，避免舊 JS 與新 HTML 混搭。 */
 
-const VERSION = 'v13';
+const VERSION = 'v14';
 const CACHE = 'pushroom-' + VERSION;
 
 /* 這些是「App 的骨架」，安裝時就抓下來 */
@@ -43,6 +43,7 @@ const PRECACHE = [
   './js/power.js',
   './js/calibflow.js',
   './js/panels.js',
+  './js/diag.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

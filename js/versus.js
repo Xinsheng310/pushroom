@@ -21,6 +21,7 @@ import { alignedTimer, msUntil } from './clock.js';
 import { shareCode, lineUrl, canNativeShare } from './share.js';
 import { getUser, getProfile, refreshProfile } from './auth.js';
 import { recordMatch, applyMatchStats } from './matches.js';
+import { diagEvent } from './diag.js';
 
 const COUNTDOWN_SEC = 3;
 
@@ -391,8 +392,22 @@ function render(v){
     sawOpponent = true;
     sfx.joined();
     flash(.14, 'var(--cool)');
+    diagEvent('對手加入：' + (op.name || '?'));
   }else if(!op){
+    if(sawOpponent) diagEvent('對手離開');
     sawOpponent = false;      // 對手離開後再回來要能再觸發一次
+  }
+  /* 對手的三個旗標各自記一筆。實測時「他到底按了沒」最常有爭議，
+     有時間戳就不用互相猜。 */
+  if(op){
+    const flags = [op.online?'在線':'離線', op.ready?'已備':'未備',
+                   op.calibrating?'校正中':'—'].join('/');
+    if(flags !== lastOpFlags){
+      diagEvent('對手 ' + flags);
+      lastOpFlags = flags;
+    }
+  }else{
+    lastOpFlags = '';
   }
   $('wOpName').textContent = op?.name || '等待中…';
   vs.opName = op?.name || '對手';
@@ -482,6 +497,7 @@ function render(v){
 
   /* --- 狀態轉換 --- */
   if(v.state !== lastState){
+    diagEvent('房間 ' + (lastState ?? '—') + ' → ' + v.state);
     lastState = v.state;
     if(v.state==='counting' && v.startAt) onCounting(v);
     if(v.state==='done') onDone(v);
@@ -512,6 +528,10 @@ export function refreshWaitRoom(){
 }
 
 let lastView = null;
+/** 上次記錄的對手旗標，用來只在變化時寫入診斷事件 */
+let lastOpFlags = '';
+/** 給診斷窗讀目前的房間視角（唯讀） */
+export const getRoomView = ()=> lastView;
 
 /* ============ 同步倒數 → 對戰 ============ */
 async function onCounting(v){
@@ -541,6 +561,10 @@ async function onCounting(v){
      自訂模式回傳 null，代表沿用各自在測試模式調的門檻。 */
   const th = thresholdsFor(v.calibMode || DEFAULT_MODE, v.hostTh);
   hooks.applyThresholds?.(th);
+  /* 起跑時刻與門檻是「雙方是否真的公平」的關鍵。
+     兩台裝置對照這一行就知道有沒有對齊。 */
+  diagEvent('開賽 @' + (startAt % 100000) + ' 門檻 ' +
+    (th ? th.down.toFixed(2)+'/'+th.up.toFixed(2) : '各自'));
   log('本場判定：'+modeLabel(v.calibMode||DEFAULT_MODE)
       + (th ? ` (下壓 ${th.down} / 回頂 ${th.up})` : '（各自自訂）'));
 
@@ -681,6 +705,10 @@ async function persistMatch(myReps){
      悄悄遺失比顯示一行小字糟糕得多。不用擋畫面，結算照常顯示。 */
   const lost = rec === 'failed' || !next;
   $('vsSyncWarn').hidden = !lost;
+  /* 結算是最不能出錯又最難重現的一步。記下雙方數字與寫入結果，
+     實測時兩台一對照就知道是誰的數字不對、還是根本沒寫進去。 */
+  diagEvent('結算 我' + myReps + ' 對手' + vs.opReps + ' → ' + rec +
+    (lost ? '（未同步）' : ''));
   /* 讓首頁的統計立刻反映新數字 */
   refreshProfile().catch(()=>{});
 }

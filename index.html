@@ -435,6 +435,15 @@
       </div>
 
       <div class="card">
+        <div class="cardtitle mono">對戰診斷</div>
+        <div class="toggle">
+          <span>顯示診斷窗<small>對戰時在畫面角落顯示房間狀態、時鐘偏移、雙方旗標</small></span>
+          <button class="sw" role="switch" id="swDiag" aria-checked="false" aria-label="顯示對戰診斷窗"></button>
+        </div>
+        <p class="hint">兩台裝置實測時打開。遇到怪狀況直接截圖，就有完整現場可以對照。</p>
+      </div>
+
+      <div class="card">
         <div class="cardtitle mono">紀錄</div>
         <pre class="log" id="log">—</pre>
       </div>
@@ -442,6 +451,17 @@
   </section>
 
   <!-- role=alert：錯誤要被立刻播報，不能等使用者剛好聚焦到這裡 -->
+  <!-- 對戰診斷。預設關閉，由測試模式的開關打開。
+       實測遇到怪狀況時直接截圖就有完整現場。 -->
+  <div id="diag" hidden>
+    <div class="diaghead mono">
+      <span>對戰診斷</span>
+      <button type="button" class="diagclose" id="diagClose" aria-label="關閉診斷">✕</button>
+    </div>
+    <div id="diagBody"></div>
+    <pre class="diagev" id="diagEvents">（還沒有事件）</pre>
+  </div>
+
   <div id="err" role="alert" aria-live="assertive"></div>
 </div>
 

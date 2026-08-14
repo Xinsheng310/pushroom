@@ -17,7 +17,7 @@ import {
 } from './auth.js';
 import {
   initLobbyUI, openLobby, installVersusHooks,
-  autoJoinFromUrl, flushPendingJoin, refreshWaitRoom,
+  autoJoinFromUrl, flushPendingJoin, refreshWaitRoom, getRoomView,
 } from './versus.js';
 import {
   loadCalib, saveCalib, clearCalib, isStale, matchesCamera, describeAge,
@@ -26,6 +26,7 @@ import { perfInfer, perfFrame, perfGap, perfReset, perfLine } from './perf.js';
 import { requestWakeLock, releaseWakeLock, wakeLockHeld, installPowerHandlers } from './power.js';
 import { beginCalibration, calibFrame, installCalibFlow, resetCalibSearch } from './calibflow.js';
 import { requireConsent, openNamePanel, renderAccount } from './panels.js';
+import { installDiag, setDiag, diagOn } from './diag.js';
 
 installGlobalHandlers();
 
@@ -628,6 +629,38 @@ $('calibClear').addEventListener('click', ()=>{
 });
 
 /* ============ 對戰接線 ============ */
+/* 診斷窗要看的本機狀態。只讀，不影響任何流程。 */
+installDiag(
+  getRoomView,
+  ()=> ({
+    phase: S.phase,
+    reps: S.reps,
+    manual: vsRun.manual,
+    /* 訊號與基準是校正的產物（裝置相依）；
+       門檻是本場套用的比例值（對戰時可能被統一成標準/寬鬆）。
+       兩者要分開顯示 —— 混在一起會讓人以為校正被改掉了。 */
+    calibKey: S.key,
+    base: S.key ? S.down?.toFixed(1) + '↓ ' + S.up?.toFixed(1) + '↑' : null,
+    th: TH.down?.toFixed(2) + '/' + TH.up?.toFixed(2),
+    myTh: myTh.down.toFixed(2) + '/' + myTh.up.toFixed(2),
+  })
+);
+
+/* 測試模式的診斷開關。
+   installDiag 會從 localStorage 還原上次的選擇，所以開關要跟著同步 ——
+   否則重整後診斷窗開著、開關卻顯示關閉，按下去等於把它關掉，
+   使用者會以為開關壞了。 */
+$('swDiag').setAttribute('aria-checked', String(diagOn()));
+$('swDiag').addEventListener('click', ()=>{
+  const next = !diagOn();
+  $('swDiag').setAttribute('aria-checked', String(next));
+  setDiag(next);
+});
+$('diagClose').addEventListener('click', ()=>{
+  setDiag(false);
+  $('swDiag').setAttribute('aria-checked', 'false');
+});
+
 installVersusHooks({
   hasCalibration: ()=> !!S.key,
   /* 等待室內自行校正。完成後回等待室（done 供房主流程用）。 */
