@@ -28,6 +28,7 @@ import { beginCalibration, calibFrame, installCalibFlow, resetCalibSearch } from
 import { requireConsent, openNamePanel, renderAccount } from './panels.js';
 import { installDiag, setDiag, diagOn } from './diag.js';
 import { acquire, fxPower, fxLock, fxWave, fxField } from './fx.js';
+import { SOLO_MODES, soloModeHint, modeLabel, thresholdsFor, isValidMode, DEFAULT_MODE } from './calibmode.js';
 
 installGlobalHandlers();
 
@@ -35,6 +36,29 @@ const video = $('cam'), skel = $('skeleton'), sctx = skel.getContext('2d');
 
 /* ============ 設定 ============ */
 const cfg = { seconds:60, front:true, skeleton:true };
+
+/* 單人的判定標準。是偏好而非流程 —— 選過就記住，
+   不該每次按開始都多問一次。 */
+const SOLO_MODE_KEY = 'pushroom.solomode.v1';
+let soloMode = DEFAULT_MODE;
+try{
+  const saved = localStorage.getItem(SOLO_MODE_KEY);
+  if(saved && isValidMode(saved) && SOLO_MODES.includes(saved)) soloMode = saved;
+}catch(e){}
+
+function paintSoloMode(){
+  for(const b of $('soloModes').children){
+    b.setAttribute('aria-checked', String(b.dataset.mode === soloMode));
+  }
+  $('soloModeHint').textContent = soloModeHint(soloMode);
+  updateCamSummary();
+}
+$('soloModes').addEventListener('click', e=>{
+  const b = e.target.closest('.chip'); if(!b) return;
+  soloMode = b.dataset.mode;
+  try{ localStorage.setItem(SOLO_MODE_KEY, soloMode); }catch(e){}
+  paintSoloMode();
+});
 
 $('durations').addEventListener('click', e=>{
   const b = e.target.closest('.chip'); if(!b) return;
@@ -89,8 +113,11 @@ loadModel(ok=>{
 
 /* 鏡頭設定摺疊。摘要文字要跟著開關走，收起來時才知道目前是什麼設定。 */
 function updateCamSummary(){
+  /* 摘要要涵蓋摺疊起來後看不到的每一項，否則收起來等於藏資訊 */
   $('camSetSum').textContent =
-    (cfg.front ? '前鏡頭' : '後鏡頭') + ' · ' + (cfg.skeleton ? '骨架開' : '骨架關');
+    (cfg.front ? '前鏡頭' : '後鏡頭') + ' · ' +
+    (cfg.skeleton ? '骨架開' : '骨架關') + ' · ' +
+    modeLabel(soloMode);
 }
 $('camSetBtn').addEventListener('click', ()=>{
   const open = $('camSetBtn').getAttribute('aria-expanded') === 'true';
@@ -228,8 +255,13 @@ function startCountdown(){
 }
 
 function beginRun(){
-  /* 還原自己的門檻 —— 上一場對戰可能把它改成標準/寬鬆 */
-  TH.down = myTh.down; TH.up = myTh.up;
+  /* 套用單人選定的判定標準。
+     custom（thresholdsFor 回 null）代表沿用自己在測試模式調的門檻。
+     跟對戰走同一個函式 —— 兩邊的行為必然一致。 */
+  const th = thresholdsFor(soloMode);
+  TH.down = th ? th.down : myTh.down;
+  TH.up   = th ? th.up   : myTh.up;
+  setGaugeMarks(TH);
   S.phase = 'run';
   resetCounter();
   S.startAt = performance.now();
@@ -805,6 +837,11 @@ if('serviceWorker' in navigator && window.isSecureContext){
    開機序列由 CSS 自動觸發，不會先閃一次靜態畫面），
    所以 show('home') 不會被呼叫，acquire() 也就沒有機會執行。 */
 acquire(); fxPower(true);
+
+/* 把記住的判定標準畫到 chips 與摘要列上。
+   沒有這一行的話，回訪者的選擇有生效卻看不到，
+   會以為設定沒被記住。 */
+paintSoloMode();
 
 /* 刻意不在啟動時開相機。
    首頁、大廳、戰績都不需要看到你 —— 一啟動就開相機等於從打開 App 那一刻

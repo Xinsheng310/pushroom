@@ -802,3 +802,21 @@ html.fxon #home::before{display:none}
   white-space:pre-wrap;word-break:break-word;max-height:60px;overflow:hidden}
 /* 巨大數字的框從 y=263 開始（375×812 下），診斷窗整體必須收在那之上，
    否則會壓到數字頂端 —— 那是這個畫面唯一不能被干擾的東西。 */
+
+/* ---------- 就位階段 ----------
+   使用者趴在地上、離螢幕約 40 公分，這是全流程唯一
+   需要在那個距離讀得到的字。 */
+.say.big{font-size:clamp(38px,12vw,64px);line-height:1;letter-spacing:-.02em}
+@media (prefers-reduced-motion: no-preference){
+  /* 極慢的呼吸。跟「緩衝期」的靜止環、「取樣期」的青色環三者質感分明。 */
+  .ring.breath{animation:ringBreath 2s ease-in-out infinite}
+}
+@keyframes ringBreath{
+  0%,100%{opacity:.55}
+  50%    {opacity:1}
+}
+/* 校正失敗時的動作指示。第一行要顯眼，分數表退到折疊裡。 */
+.diaghint{color:var(--fg);font-size:14px;line-height:1.7;margin-bottom:12px}
+.scoredetail{margin-top:4px}
+.scoredetail summary{color:var(--dim);font-size:11px;letter-spacing:.1em;
+  cursor:pointer;padding:6px 0;min-height:32px}

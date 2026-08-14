@@ -73,12 +73,14 @@
         </div>
       </div>
 
-      <!-- 鏡頭設定摺疊：新使用者無法在沒看過畫面前判斷該用哪個鏡頭，
-           老使用者設好也不再動。摺疊後釋放約 30% 的垂直空間。 -->
+      <!-- 進階設定摺疊：新使用者無法在沒看過畫面前判斷該用哪個鏡頭，
+           老使用者設好也不再動。摺疊後釋放約 30% 的垂直空間。
+           判定標準也放這裡 —— 那是偏好而非流程，不該每次開始都多按一次，
+           而首頁的視覺重點要留給橘色 CTA。 -->
       <div class="field camset">
         <button class="camtoggle mono" id="camSetBtn" aria-expanded="false">
-          <span>鏡頭設定</span>
-          <small id="camSetSum">前鏡頭 · 骨架開</small>
+          <span>進階設定</span>
+          <small id="camSetSum">前鏡頭 · 骨架開 · 標準</small>
         </button>
         <div id="camSetBody" hidden>
           <div class="toggle">
@@ -88,6 +90,15 @@
           <div class="toggle">
             <span>顯示骨架<small>確認鏡頭有抓到你，會稍微耗電</small></span>
             <button class="sw" role="switch" id="swSkel" aria-checked="true" aria-label="顯示骨架"></button>
+          </div>
+          <div class="field">
+            <label>算一下的標準</label>
+            <div class="chips" id="soloModes" role="radiogroup" aria-label="算一下的標準">
+              <button class="chip" role="radio" data-mode="standard" aria-checked="true">標準</button>
+              <button class="chip" role="radio" data-mode="loose">寬鬆</button>
+              <button class="chip" role="radio" data-mode="custom">自訂</button>
+            </div>
+            <p class="note" id="soloModeHint">要下到接近最低點才算一下</p>
           </div>
         </div>
       </div>
@@ -109,7 +120,7 @@
       <button class="cta" id="start" disabled>開始</button>
       <button class="ghost wide stack" id="versusBtn" hidden>跟朋友對戰</button>
       <p class="vshint" id="versusHint" hidden>需要登入才能開房間</p>
-      <p class="note" id="homeNote">按下開始才會啟用相機。首次會做 <b>兩次校正</b>：先撐直手臂，再下到最低點，之後開始計時。<button class="linkbtn" id="labBtn">測試模式</button></p>
+      <p class="note" id="homeNote">按下開始才會啟用相機。<b>先把手機放好、趴好</b>，畫面等你不動了才會開始校正：先撐直手臂，再下到最低點，之後計時。<button class="linkbtn" id="labBtn">測試模式</button></p>
     </div>
   </section>
 

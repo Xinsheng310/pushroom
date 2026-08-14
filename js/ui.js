@@ -89,6 +89,9 @@ const ringFg = $('ring').querySelector('.fg');
 export const setRing = p => { ringFg.style.strokeDashoffset = 327*(1-p); };
 export const setRingStroke = c => { ringFg.style.stroke = c; };
 export const showRing = on => { $('ring').style.visibility = on?'visible':'hidden'; };
+/* 就位階段的環用呼吸區隔於「緩衝」（靜止）與「取樣」（青色+掃描線）——
+   趴著看的時候，三個階段要靠質感分辨，光靠顏色不夠。 */
+export const setRingBreath = on => $('ring').classList.toggle('breath', !!on);
 
 /* ============ 校正失敗的分數表 ============ */
 /**
@@ -98,7 +101,11 @@ export const showRing = on => { $('ring').style.visibility = on?'visible':'hidde
  * @param {Object} SIGNALS
  * @param {number} PASS
  */
-export function renderCalibReport(report, best, SIGNALS, PASS){
+/**
+ * @param {string} [hint] 第一行的動作指示。分數表折進 <details> ——
+ *        那是除錯資訊，不該是使用者看到的第一個東西。
+ */
+export function renderCalibReport(report, best, SIGNALS, PASS, hint){
   const table = el('table', null, 'scores');
   const tbody = document.createElement('tbody');
   for(const r of report){
@@ -111,7 +118,19 @@ export function renderCalibReport(report, best, SIGNALS, PASS){
   table.appendChild(tbody);
   const note = el('div',
     `分數要 ${PASS.toFixed(1)} 以上才算穩。分數低代表上下兩個姿勢在鏡頭裡差別不夠明顯，或是撐住時晃動太多。`);
-  replaceChildren($('subSay'), [table, note]);
+
+  /* 分數表折疊起來。規格第 3.2 節要求「必須列出四個訊號各自的分數」——
+     可展開仍然滿足，但使用者第一眼看到的該是「該怎麼做」。 */
+  const det = document.createElement('details');
+  det.className = 'scoredetail';
+  const sum = document.createElement('summary');
+  sum.textContent = '看詳細分數';
+  det.append(sum, table, note);
+
+  const parts = [];
+  if(hint) parts.push(el('div', hint, 'diaghint'));
+  parts.push(det);
+  replaceChildren($('subSay'), parts);
 }
 
 /* ============ 節奏條 ============ */

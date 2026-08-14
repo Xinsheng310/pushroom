@@ -72,3 +72,17 @@ export function thresholdsFor(mode, roomTh){
   }
   return m.th ? { ...m.th } : null;
 }
+
+/* ============ 單人模式 ============
+
+   單人沒有「房主」這個概念，所以 hostth 要排除掉。
+   而 custom 的說明文字是為對戰寫的（「雙方各自用…」），
+   單人語境要換一句。 */
+
+export const SOLO_MODES = ['standard', 'loose', 'custom'];
+
+/** 單人語境的說明文字。只有 custom 需要覆寫。 */
+export function soloModeHint(m){
+  if(m === 'custom') return '用你在測試模式自己調的門檻';
+  return modeHint(m);
+}
