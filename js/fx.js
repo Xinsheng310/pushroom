@@ -31,7 +31,11 @@ const VERT = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
 /* 等高線用 fract 取環帶、step 硬切成階 —— 不做連續漸層，
    那會立刻變成 2000 年代的音樂視覺化。
    顏色只有 ink 與 cool 兩軸：橘色永遠不進背景（橘＝需要立刻注意）。 */
-const FRAG = `precision highp float;
+/* fwidth() 在 WebGL1 需要 OES_standard_derivatives。
+   沒有這個 extension shader 就編不過、整層背景會靜默消失，
+   所以要在 acquire() 裡先啟用，並在編不過時退回無導數的版本。 */
+const FRAG = `#extension GL_OES_standard_derivatives : enable
+precision highp float;
 uniform vec2  uRes;
 uniform float uTime;
 uniform float uPower;    // 0=未上電 1=完全亮起
@@ -71,12 +75,17 @@ void main(){
       y=max(y, exp(-pow(dx*260.,2.)));
       near=min(near,dx);
     }
-    float base=uv.y+.10;
-    float h=y*.46;
-    float line=smoothstep(.016,0.,abs(base-h))*(.35+y*.65);
-    float stem=step(near,.0016)*step(0.,h-max(base,0.))*step(base,h)*.5;
-    float glow=smoothstep(.26,0.,abs(base-h))*.10*y;
-    gl_FragColor=vec4(ink+cool*(line+stem+glow)*uPower,1.);
+    /* 波形壓到畫面下三分之一。原本置中（uv.y+.10）正好在
+       巨大數字後面 —— 那個數字是結算畫面的主角，不能被干擾。
+       實測舊值在文字區的亮度到 210（ink 基準 15），完全讀不了。 */
+    float base=uv.y+.30;
+    float h=y*.24;
+    float line=smoothstep(.010,0.,abs(base-h))*(.4+y*.6);
+    float stem=step(near,.0012)*step(base,h)*step(-.02,base)*.28;
+    /* 三者相加要收在 1 以內，否則會爆成純白。
+       整體再乘 .22 —— 這是背景，不是主角。 */
+    float ink_add=min(1., line+stem)*.22;
+    gl_FragColor=vec4(ink+cool*ink_add*uPower,1.);
     return;
   }
 
@@ -89,12 +98,30 @@ void main(){
   float wob=fbm(uv*2.3+uTime*.08)*(1.-uLock);
   float v=d*7.5+wob*1.9-uTime*.10;
 
-  float band=fract(v);
-  float c=step(.86,band)*.55+step(.965,band)*.45;
-  float core=smoothstep(.42,0.,d)*uLock*.20;
+  /* 等高線必須是「線」而不是「帶」。
+     原本用 step(.86,band) 等於讓每一圈有 14% 的寬度整片亮起，
+     那不是等高線、那是同心色塊 —— 實機上直接蓋掉文字。
 
-  gl_FragColor=vec4(ink+cool*(c*.30+core)*uPower,1.);
+     改用「離環帶邊界的距離」畫細線：fwidth 讓線寬固定在
+     一個像素左右，不隨圈數或螢幕密度變粗。 */
+  float band=fract(v);
+  float edge=min(band,1.-band);             // 到最近一條等高線的距離
+  float w=fwidth(v)*1.2;                    // 一像素寬（螢幕空間）
+  float c=1.-smoothstep(0.,w,edge);
+
+  /* 中央的光暈拿掉。內容（大標、按鈕、狀態列）全部壓在中間，
+     背景在那裡最亮等於刻意跟文字打對台。
+     改成「越靠中央越暗」，把最暗的區域讓給文字。 */
+  float clear=smoothstep(.0,.62,d);         // 中央 0 → 外圍 1
+
+  gl_FragColor=vec4(ink+cool*c*.16*clear*uPower,1.);
 }`;
+
+/* 沒有 OES_standard_derivatives 時的退回版：
+   用固定寬度取代 fwidth。線會略粗一點，但仍然是線而不是色塊。 */
+const FRAG_NO_DERIV = FRAG
+  .replace(/^#extension .*\n/m, '')
+  .replace('float w=fwidth(v)*1.2;', 'float w=0.06;');
 
 /* 目標值（外部設定）與目前值（每幀補間）分開，
    這樣呼叫端只要說「要變成什麼」，不必自己管動畫。 */
@@ -139,8 +166,12 @@ export function acquire(){
 
   canvas.addEventListener('webglcontextlost', onLost, false);
 
+  /* 先啟用導數（fwidth 用），沒有就用退回版的 shader */
+  const hasDeriv = !!gl.getExtension('OES_standard_derivatives');
   const vs = compile(gl.VERTEX_SHADER, VERT);
-  const fs = compile(gl.FRAGMENT_SHADER, FRAG);
+  let fs = compile(gl.FRAGMENT_SHADER, hasDeriv ? FRAG : FRAG_NO_DERIV);
+  /* 就算宣稱支援，某些驅動仍會編不過 —— 再退一次，不要直接放棄整層 */
+  if(!fs && hasDeriv) fs = compile(gl.FRAGMENT_SHADER, FRAG_NO_DERIV);
   if(!vs || !fs){ giveUp('shader 編譯失敗'); return; }
 
   prog = gl.createProgram();

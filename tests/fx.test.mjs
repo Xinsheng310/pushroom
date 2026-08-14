@@ -75,6 +75,30 @@ const fragBody = fx.slice(fx.indexOf('const FRAG'), fx.indexOf('`;', fx.indexOf(
 ok(!/1\.0*,\s*\.35|signal|FF5A1F/i.test(fragBody),
    'shader 不可出現橘色 —— 那是「需要立刻注意」的專用色');
 
+console.log('=== 背景不可蓋掉文字 ===');
+/* 實機截圖抓到的問題：等高線原本用 step(.86,band) 畫，
+   等於每一圈有 14% 的寬度整片亮起 —— 那是同心色塊不是等高線，
+   實測 61.7% 的畫面被點亮、文字區亮度到 126（ink 基準 15）。
+   修正後降到 0.8% 與 22。這幾條防的就是同一類回歸。 */
+/* 註解要先去掉 —— shader 裡的說明文字引用了「不該這樣寫」的舊寫法，
+   直接比對整段會把說明誤判成違規。 */
+const frag = fx.slice(fx.indexOf('const FRAG'), fx.indexOf('`;', fx.indexOf('const FRAG')))
+  .replace(/\/\*[\s\S]*?\*\//g, '');
+ok(!/step\(\.\d+,\s*band\)/.test(frag),
+   '等高線不可用 step(x,band) 畫 —— 那會變成整片色塊而非細線');
+ok(/fwidth|float w=/.test(frag),
+   '等高線要用「到邊界的距離 + 線寬」畫成細線');
+/* 內容集中在畫面中段，背景在那裡最亮就是跟文字打對台 */
+ok(/clear|smoothstep\(\.?0?\.?,\s*\.\d+,\s*d\)/.test(frag),
+   '中央區域要壓暗，把最暗的地方讓給文字');
+ok(!/core\s*=\s*smoothstep\([^)]*\)\s*\*\s*uLock/.test(frag),
+   '中央不可再加光暈 —— 那正好在大標與按鈕後面');
+/* 波形三項相加會超過 1 而爆白，且置中會壓到巨大數字 */
+ok(/min\(1\.,/.test(frag),
+   '波形的亮度相加要 clamp 在 1 以內，否則會爆成純白');
+ok(!/float base=uv\.y\+\.10;/.test(frag),
+   '波形不可置中 —— 那正好在結算的巨大數字後面');
+
 console.log('=== 有被 precache ===');
 ok(fs.readFileSync(rel('sw.js'),'utf8').includes("'./js/fx.js'"), 'sw.js 要 precache fx.js');
 

@@ -14,7 +14,7 @@
 
    4. 換版時清掉舊快取，避免舊 JS 與新 HTML 混搭。 */
 
-const VERSION = 'v15';
+const VERSION = 'v16';
 const CACHE = 'pushroom-' + VERSION;
 
 /* 這些是「App 的骨架」，安裝時就抓下來 */
