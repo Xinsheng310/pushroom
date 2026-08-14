@@ -4,6 +4,7 @@
    這裡所有清單都用建 DOM 的方式產生，不留 innerHTML 的路徑給未來誤用。 */
 
 import { clearTransientErr } from './log.js';
+import { FX_PANELS, acquire, release, fxPower, fxField } from './fx.js';
 
 export const $ = id => document.getElementById(id);
 
@@ -29,6 +30,18 @@ export const show = name =>{
   lastShown = name;
   /* 切畫面時自動管理掃描線，避免忘記關而讓它跟進計數畫面 */
   setScan(SCAN_PANELS.has(name) ? 'on' : 'off');
+  /* 背景等高線場同理，集中在這裡管理。
+     ⚠ 不是只暫停 —— 需要推論的畫面要真的釋放 WebGL context，
+     否則會跟 MediaPipe 搶 context 額度（見 js/fx.js 檔頭）。 */
+  if(FX_PANELS.has(name)){
+    acquire(); fxPower(true);
+    /* 波形只屬於結算畫面。離開就回到等高線場 ——
+       否則下一次回首頁會看到上一場殘留的波形。
+       放在這裡而不是各個「回首頁」的按鈕上：那是面板的性質，
+       不是誰按了什麼的性質，集中管理才不會漏。 */
+    if(name !== 'result' && name !== 'vsresult') fxField();
+  }
+  else release();
   /* 非致命的錯誤不該跟著使用者跨畫面，尤其不該出現在結算的勝利瞬間 */
   if(changed) clearTransientErr();
   Object.entries(panels).forEach(([k,el])=>{

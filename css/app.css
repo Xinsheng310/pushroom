@@ -40,6 +40,11 @@ body{
 
 /* ---------- stage ---------- */
 #stage{position:fixed;inset:0;overflow:hidden;background:#000}
+/* 背景等高線場。壓在相機之上、面板之下。
+   只在不需要推論的畫面顯示，其餘畫面連 context 都會釋放（見 js/fx.js）。 */
+#fx{position:absolute;inset:0;width:100%;height:100%;display:block;
+  pointer-events:none;z-index:0}
+#fx[hidden]{display:none}
 #cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
 #cam.mirror{transform:scaleX(-1)}
 #skeleton{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
@@ -107,8 +112,12 @@ body{
   #home.on .hz1{animation-delay:.04s}
   #home.on .hz2{animation-delay:.13s}
   #home.on .hz3{animation-delay:.2s}
-  /* 品牌兩行再各自錯開，讓「開機」有逐段點亮的節奏 */
-  #home.on .brandmark span{animation:markIn .42s cubic-bezier(.2,.8,.2,1) both}
+  /* 品牌兩行從錯開的位置吸合到位 —— 字像磁鐵吸在一起。
+     用 transform 位移而非 letter-spacing：後者會逐幀觸發
+     layout + text shaping，Anton 又是 web font，
+     低階 Android 上 700ms 的字距動畫會掉到 20fps。
+     transform 走合成器，視覺幾乎一樣但成本近乎零。 */
+  #home.on .brandmark span{animation:markIn .62s cubic-bezier(.2,.9,.2,1) both}
   #home.on .brandmark span:nth-child(1){animation-delay:.06s}
   #home.on .brandmark span:nth-child(2){animation-delay:.15s}
   /* 自檢的一劃：銘牌上緣的線由左掃出 */
@@ -129,9 +138,11 @@ body{
   from{transform:translateY(12px);opacity:0}
   to  {transform:none;            opacity:1}
 }
+/* 上下兩行朝相反方向吸合。只用 transform + opacity ——
+   即使動畫沒跑，最壞情況也只是字偏移一點，仍然看得見。 */
 @keyframes markIn{
-  from{clip-path:inset(0 100% 0 0)}
-  to  {clip-path:inset(0 0 0 0)}
+  from{transform:translateX(var(--mx,0));opacity:0}
+  to  {transform:none;                   opacity:1}
 }
 @keyframes ruleIn{
   from{clip-path:inset(0 100% 0 0)}
@@ -165,6 +176,8 @@ body{
 .brandmark{margin:0;display:flex;flex-direction:column;
   font-size:clamp(42px,16.5vw,80px);line-height:.84;letter-spacing:-.035em}
 .brandmark span{display:block}
+.brandmark span:nth-child(1){--mx:.10em}
+.brandmark span:nth-child(2){--mx:-.12em}
 /* 銘牌的資訊密度來自「小字很多、大字很少」的對比 */
 .nameplate{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
   margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
@@ -267,6 +280,20 @@ body{
   border-radius:99px;background:var(--cool)}
 .bullets b{color:var(--fg);font-weight:500}
 
+/* fx 活著時面板讓出背景，讓等高線場透出來。
+
+   ⚠ 預設仍然是不透明的 —— 那是防止相機透出的最後一道防線
+   （首頁曾經因為面板塌陷而露出鏡頭，見 #home 上方的警告）。
+   只有在確認 shader 真的在畫的時候才轉透明，
+   而 shader 自己會畫 ink 底色，所以視覺結果一樣是滿版不透明。 */
+html.fxon #home,
+html.fxon #lobby,
+html.fxon #wait,
+html.fxon #result,
+html.fxon #vsresult{background-image:none;background-color:transparent}
+/* 首頁的網格背景交給 shader，不要疊兩層 */
+html.fxon #home::before{display:none}
+
 /* ---------- lobby / wait / vsresult ---------- */
 #lobby{background-color:var(--ink);
   background-image:radial-gradient(120% 80% at 50% -10%, #1C2733 0%, var(--ink) 60%);
@@ -299,6 +326,8 @@ body{
 .vsside.right{text-align:right}
 .vsside b{display:block;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vsside small{display:block;color:var(--dim);font-size:11px;margin-top:3px}
+/* 戰績用青色：那是「系統知道的事實」，不是需要立刻注意的東西 */
+.vsrec{color:var(--cool);font-size:10px;letter-spacing:.04em;margin-top:5px}
 .vsdot{flex:0 0 auto;font-size:11px;letter-spacing:.14em;color:var(--dim)}
 
 .modebar,.calibbar{display:flex;align-items:center;justify-content:space-between;gap:12px;

@@ -27,6 +27,7 @@ import { requestWakeLock, releaseWakeLock, wakeLockHeld, installPowerHandlers } 
 import { beginCalibration, calibFrame, installCalibFlow, resetCalibSearch } from './calibflow.js';
 import { requireConsent, openNamePanel, renderAccount } from './panels.js';
 import { installDiag, setDiag, diagOn } from './diag.js';
+import { acquire, fxPower, fxLock, fxWave, fxField } from './fx.js';
 
 installGlobalHandlers();
 
@@ -81,6 +82,9 @@ loadModel(ok=>{
   setSysState(ok?'ready':'failed', ok? 'MODEL · READY' : 'MODEL · FAILED');
   /* 模型載完是靜默變色的，使用者可能正盯著別處。給一次解鎖提示。 */
   if(ok) replay($('start'), 'unlocked');
+  /* 背景等高線場收斂成規則同心圓 —— 開機完成不是一句文字，
+     是整個場安定下來。載入失敗就維持流動（那確實還沒就緒）。 */
+  if(ok) fxLock(true);
 });
 
 /* 鏡頭設定摺疊。摘要文字要跟著開關走，收起來時才知道目前是什麼設定。 */
@@ -393,6 +397,11 @@ function finish(){
   $('rFast').textContent = fast;
   drawChart(S.times, dur);
   show('result');
+  /* 背景改畫這一場真實的節奏。必須在 show() 之後 ——
+     context 是在 show() 裡才建立的。
+     用真實資料是這個效果的全部意義：一旦改成裝飾性亂數，
+     第二次玩就會發現波形跟自己的節奏對不上。 */
+  fxWave(S.times);
   /* 已登入就累加個人戰績。失敗不影響結算畫面（auth.js 內部已吞掉錯誤）。 */
   addSession(S.reps);
 }
@@ -680,6 +689,9 @@ installVersusHooks({
   },
   /* 「我的」模式要把房主自己調的門檻帶進房間 */
   getMyThresholds: ()=> ({ down:myTh.down, up:myTh.up }),
+  /* 結算背景的波形資料。走 hooks 而不是讓 versus 直接依賴 detect —— 
+     versus 是流程層，不該知道計數器的內部狀態。 */
+  getRepTimes: ()=> S.times,
   /* 倒數開始就恢復推論，讓 GPU 熱起來（見 INFER_PHASES 的說明） */
   warmUpInference: ()=>{ if(S.phase==='idle') S.phase = 'countdown'; },
   beginVsRun,
@@ -787,6 +799,12 @@ if('serviceWorker' in navigator && window.isSecureContext){
   if(document.readyState === 'complete') registerSW();
   else addEventListener('load', registerSW);
 }
+
+/* 首頁的背景場要在啟動時就起來。
+   #home 在 HTML 裡就帶著 class="on"（見 css 的說明：那是為了讓
+   開機序列由 CSS 自動觸發，不會先閃一次靜態畫面），
+   所以 show('home') 不會被呼叫，acquire() 也就沒有機會執行。 */
+acquire(); fxPower(true);
 
 /* 刻意不在啟動時開相機。
    首頁、大廳、戰績都不需要看到你 —— 一啟動就開相機等於從打開 App 那一刻

@@ -20,8 +20,9 @@ import { normalizeCode, isValidCode, codeFromUrl } from './roomcode.js';
 import { alignedTimer, msUntil } from './clock.js';
 import { shareCode, lineUrl, canNativeShare } from './share.js';
 import { getUser, getProfile, refreshProfile } from './auth.js';
-import { recordMatch, applyMatchStats } from './matches.js';
+import { recordMatch, applyMatchStats, getPublicProfile } from './matches.js';
 import { diagEvent } from './diag.js';
+import { fxSecond, fxWave } from './fx.js';
 
 const COUNTDOWN_SEC = 3;
 
@@ -33,6 +34,7 @@ let hooks = {
   hasCalibration: null,     // () => boolean
   applyThresholds: null,    // (th|null) => void
   getMyThresholds: null,    // () => {down,up}  房主自己調的門檻
+  getRepTimes: null,        // () => number[]  這一場每下的時間戳（結算波形用）
   warmUpInference: null,    // () => void  倒數期間先把推論打開暖機
 };
 export function installVersusHooks(h){ hooks = { ...hooks, ...h }; }
@@ -79,6 +81,44 @@ let sawOpponent = false;
 let foldPinned = false;
 /** 校正逾時保險 */
 let calibFlagTimer = null;
+/* 戰績快取。render() 每次房間變動都會跑，不能每次都打 Firestore。
+   key 是 uid，值是格式化好的字串（或 null 代表查過但沒有）。 */
+const recCache = new Map();
+
+/** 把 stats 轉成一行可讀的戰績。沒打過就不顯示。 */
+function fmtRecord(st){
+  if(!st) return '';
+  const w = st.wins|0, l = st.losses|0, d = st.draws|0;
+  const best = st.bestSession|0;
+  if(!(w+l+d) && !best) return '';
+  const parts = [];
+  if(w+l+d) parts.push(`${w}勝${l}敗` + (d ? `${d}平` : ''));
+  if(best)  parts.push(`最佳 ${best}`);
+  return parts.join(' · ');
+}
+
+/**
+ * 顯示某一側的戰績。查過的結果快取起來 ——
+ * render() 每次房間變動都會被呼叫，不快取等於連續打 Firestore。
+ */
+function showRecord(elId, uid){
+  const el = $(elId);
+  if(!uid){ el.hidden = true; return; }
+  if(recCache.has(uid)){
+    const txt = recCache.get(uid);
+    el.textContent = txt || '';
+    el.hidden = !txt;
+    return;
+  }
+  /* 先標記為查詢中，避免同一個 uid 併發查多次 */
+  recCache.set(uid, '');
+  getPublicProfile(uid).then(p=>{
+    const txt = fmtRecord(p?.stats);
+    recCache.set(uid, txt);
+    /* 查回來時使用者可能已經離開房間，再確認一次才寫 */
+    if(lastView) { el.textContent = txt; el.hidden = !txt; }
+  }).catch(()=>{});
+}
 
 /* ============ 等待室的四個階段 ============
 
@@ -393,9 +433,13 @@ function render(v){
     sfx.joined();
     flash(.14, 'var(--cool)');
     diagEvent('對手加入：' + (op.name || '?'));
+    /* 背景從一個中心變兩個互相干涉 —— 對手出現不是換一行字，
+       是整個場的拓撲變了。 */
+    fxSecond(true);
   }else if(!op){
     if(sawOpponent) diagEvent('對手離開');
     sawOpponent = false;      // 對手離開後再回來要能再觸發一次
+    fxSecond(false);
   }
   /* 對手的三個旗標各自記一筆。實測時「他到底按了沒」最常有爭議，
      有時間戳就不用互相猜。 */
@@ -411,6 +455,9 @@ function render(v){
   }
   $('wOpName').textContent = op?.name || '等待中…';
   vs.opName = op?.name || '對手';
+  /* 雙方的戰績。這是等待室最有價值的資訊，卻一直沒顯示過。 */
+  showRecord('wMeRec', v.me?.uid);
+  showRecord('wOpRec', op?.uid);
 
   /* 我自己的準備狀態以 RTDB 為準（換裝置或重連後也正確） */
   myReady = !!v.me?.ready;
@@ -720,6 +767,8 @@ function showVsResult(){
   $('vsLive').hidden = true;
   paintResult();
   show('vsresult');
+  /* 必須在 show() 之後 —— WebGL context 是在那裡才建立的 */
+  fxWave(hooks.getRepTimes?.() || []);
   sfx.end();
 }
 

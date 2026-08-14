@@ -135,6 +135,28 @@ export async function listMyMatches(uid, limit=20){
   }
 }
 
+/**
+ * 讀某個人的公開統計（暱稱與戰績）。
+ * 規則允許已登入者讀 users —— 那裡沒有 email、沒有任何聯絡資訊。
+ *
+ * 用途：等待室顯示對手的戰績。這些數字一直都在，只是從來沒顯示過，
+ * 而「他 12 勝 3 敗、單場最佳 41」帶來的緊張感勝過任何特效。
+ * @returns {Promise<{displayName:string, stats:object}|null>}
+ */
+export async function getPublicProfile(uid){
+  if(!isReady() || !uid) return null;
+  const { store: S } = getSdk();
+  try{
+    const snap = await S.getDoc(S.doc(getDb(),'users',uid));
+    if(!snap.exists()) return null;
+    const d = snap.data();
+    return { displayName: d.displayName || '', stats: d.stats || {} };
+  }catch(e){
+    log('讀取對手資料失敗：'+(e.message||e).toString().slice(0,80));
+    return null;
+  }
+}
+
 /** 從我的視角判斷勝負 */
 export function outcomeFor(uid, match){
   if(!match) return 'draw';

@@ -24,6 +24,11 @@
   <canvas id="skeleton"></canvas>
   <div id="veil"></div>
   <div id="flash"></div>
+  <!-- 背景等高線場。只在不需要推論的畫面出現（見 js/fx.js 的 FX_PANELS），
+       其餘畫面連 WebGL context 都會被釋放掉，不跟 MediaPipe 搶資源。
+       預設 hidden：取不到 WebGL 或 context lost 時就一直維持隱藏，
+       首頁退回純 CSS 背景。 -->
+  <canvas id="fx" hidden aria-hidden="true"></canvas>
   <!-- 掃描線：只在等待室與校正取樣期啟用（見 css 的說明） -->
   <div id="scan" class="scan"></div>
 
@@ -200,11 +205,15 @@
         <div class="vsside">
           <b id="wMeName" class="mono">—</b>
           <small id="wMeState">你</small>
+          <small class="vsrec mono" id="wMeRec" hidden></small>
         </div>
         <div class="vsdot mono">VS</div>
         <div class="vsside right">
           <b id="wOpName" class="mono">等待中…</b>
           <small id="wOpState">尚未加入</small>
+          <!-- 對手的戰績。這些數字 Firestore 一直都有，只是從沒顯示過 —— 
+               「他 12 勝 3 敗」帶來的緊張感勝過任何特效。 -->
+          <small class="vsrec mono" id="wOpRec" hidden></small>
         </div>
       </div>
 
